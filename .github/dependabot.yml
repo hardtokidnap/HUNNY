@@ -1,0 +1,23 @@
+# Dependabot version updates for Hunny.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # npm dependencies (discord.js, better-sqlite3, pg)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Patch/minor npm noise grouped into one PR; majors stay separate
+    # because discord.js majors break APIs.
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Base image in the Dockerfile (node:20-bookworm-slim)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
