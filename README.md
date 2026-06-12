@@ -90,8 +90,8 @@ present, otherwise the local SQLite file.
 2. Read the ephemeral reply (required permissions and role-hierarchy warning).
 3. Post one message in that channel. The bot pins it and the honeypot goes live.
 
-`/setup` is registered as a guild command on `ready` and on `guildCreate`, so it
-appears instantly in every server the bot joins.
+`/setup` is registered as a global command at startup, so it is available in
+every server the bot joins, including ones it joins later.
 
 ## Logging
 

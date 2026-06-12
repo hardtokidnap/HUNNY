@@ -211,29 +211,29 @@ async function sendGuildLog(guild, config, text) {
   }
 }
 
-async function registerCommandsForGuild(guild) {
-  try {
-    await guild.commands.set([setupCommand.toJSON()]);
-    gInfo('commands', guild, 'registered /setup');
-  } catch (err) {
-    gError('commands', guild, 'registering /setup', err);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 
 client.once(Events.ClientReady, async (c) => {
   console.log(`[ready] Logged in as ${c.user.tag}`);
-  // Register as guild commands everywhere for instant availability.
-  for (const guild of c.guilds.cache.values()) {
-    await registerCommandsForGuild(guild);
+  // Global registration: one call covers every current and future guild, and
+  // the App Directory's "uses slash commands" check only sees global commands.
+  try {
+    await c.application.commands.set([setupCommand.toJSON()]);
+    console.log('[commands] Registered /setup globally');
+  } catch (err) {
+    console.error('[commands] Failed to register /setup globally:', err);
   }
-});
-
-client.on(Events.GuildCreate, async (guild) => {
-  await registerCommandsForGuild(guild);
+  // Clear guild-scoped copies left by versions that registered per guild, so
+  // the command picker doesn't offer /setup twice.
+  for (const guild of c.guilds.cache.values()) {
+    try {
+      await guild.commands.set([]);
+    } catch (err) {
+      gWarn('commands', guild, 'clearing legacy guild commands', err);
+    }
+  }
 });
 
 // Privacy: drop the guild's config the moment the bot is kicked or the guild is
