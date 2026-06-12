@@ -14,6 +14,7 @@ const {
 } = require('discord.js');
 
 const store = require('./store');
+const { gInfo, gWarn, gError } = require('./log');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 if (!TOKEN) {
@@ -23,6 +24,9 @@ if (!TOKEN) {
 
 const BAN_REASON = 'Honeypot triggered - compromised/spam account';
 const DELETE_MESSAGE_SECONDS = 604800; // 7 days, purges spam server-wide
+// Days of per-guild event history kept in the database for backend review.
+const LOG_RETENTION_DAYS = Math.max(1, Number(process.env.LOG_RETENTION_DAYS) || 30);
+const PRUNE_INTERVAL_MS = 86400000;
 
 const client = new Client({
   intents: [
@@ -73,14 +77,35 @@ const setupCommand = new SlashCommandBuilder()
       .setDescription('The text channel to turn into the honeypot.')
       .addChannelTypes(ChannelType.GuildText)
       .setRequired(true),
+  )
+  .addChannelOption((option) =>
+    option
+      .setName('log_channel')
+      .setDescription('Channel where the bot posts activation and ban notices (optional).')
+      .addChannelTypes(ChannelType.GuildText)
+      .setRequired(false),
   );
+
+// In-guild activity feed for server staff. Best-effort by design: a missing
+// channel or missing Send Messages permission must never affect the ban flow.
+async function sendGuildLog(guild, config, text) {
+  if (!config?.logChannelId) return;
+  try {
+    const channel =
+      guild.channels.cache.get(config.logChannelId) ??
+      (await guild.channels.fetch(config.logChannelId));
+    await channel.send(text);
+  } catch (err) {
+    gWarn('guildlog', guild, `posting to log channel ${config.logChannelId}`, err);
+  }
+}
 
 async function registerCommandsForGuild(guild) {
   try {
     await guild.commands.set([setupCommand.toJSON()]);
-    console.log(`[commands] Registered /setup in guild ${guild.id} (${guild.name})`);
+    gInfo('commands', guild, 'registered /setup');
   } catch (err) {
-    console.error(`[commands] Failed to register in guild ${guild.id}:`, err);
+    gError('commands', guild, 'registering /setup', err);
   }
 }
 
@@ -105,9 +130,9 @@ client.on(Events.GuildCreate, async (guild) => {
 client.on(Events.GuildDelete, async (guild) => {
   try {
     await store.deleteGuild(guild.id);
-    console.log(`[cleanup] Removed config for departed guild ${guild.id}`);
+    gInfo('cleanup', guild, 'removed config for departed guild');
   } catch (err) {
-    console.error(`[cleanup] Failed to remove config for guild ${guild.id}:`, err);
+    gError('cleanup', guild, 'removing config for departed guild', err);
   }
 });
 
@@ -140,19 +165,40 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const channel = interaction.options.getChannel('channel');
+    const logChannel = interaction.options.getChannel('log_channel');
 
-    await store.setHoneypot(interaction.guildId, channel.id, interaction.user.id);
+    await store.setHoneypot(interaction.guildId, channel.id, interaction.user.id, logChannel?.id ?? null);
+
+    gInfo(
+      'setup',
+      interaction.guild,
+      `honeypot designated: channel ${channel.id} by ${interaction.user.tag} (${interaction.user.id})` +
+        (logChannel ? `, log channel ${logChannel.id}` : '') +
+        ', awaiting anchor',
+    );
+
+    // Catch the silent-notice failure mode up front: without Send Messages in
+    // the log channel, staff would never learn why notices don't arrive.
+    const canPostNotices =
+      !logChannel ||
+      (logChannel.permissionsFor(interaction.guild.members.me)?.has(PermissionFlagsBits.SendMessages) ?? false);
 
     await interaction.reply({
       flags: MessageFlags.Ephemeral,
       content: [
         `Honeypot channel set to <#${channel.id}>.`,
+        logChannel ? `Activity notices will be posted in <#${logChannel.id}>.` : null,
+        canPostNotices
+          ? null
+          : `:warning: I don't have **Send Messages** in <#${logChannel.id}>, so notices will fail ` +
+            'until that permission is granted.',
         '',
         '**Permissions this bot needs:**',
         '- Ban Members',
         '- Manage Messages',
         '- View Channel',
         '- Read Message History',
+        logChannel ? '- Send Messages (in the log channel)' : null,
         '',
         '**Important:** the bot\'s role must sit **ABOVE** the roles of anyone it ' +
           'should be able to ban. If a target outranks the bot, the ban silently fails.',
@@ -160,10 +206,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         `**Final step:** go to <#${channel.id}> and post **one** message now. ` +
           'The bot will pin it as the permanent warning notice and flip the honeypot to ' +
           '**ACTIVE**. That anchor message is never deleted and never triggers a ban.',
-      ].join('\n'),
+      ].filter((line) => line !== null).join('\n'),
     });
   } catch (err) {
-    console.error('[setup] Handler error:', err);
+    gError('setup', interaction.guild, 'handling /setup', err);
     // Best-effort error reply.
     try {
       if (interaction.deferred || interaction.replied) {
@@ -208,12 +254,17 @@ client.on(Events.MessageCreate, async (message) => {
       try {
         await message.pin();
       } catch (err) {
-        console.warn(`[anchor] Failed to pin anchor message in guild ${message.guildId}:`, err);
+        gWarn('anchor', message.guild, `pinning anchor message ${message.id}`, err);
       }
 
       await store.setAnchor(message.guildId, message.id);
 
-      console.log(`[anchor] Honeypot ACTIVE in guild ${message.guildId}, anchor ${message.id}`);
+      gInfo('anchor', message.guild, `honeypot ACTIVE, anchor ${message.id}`);
+      await sendGuildLog(
+        message.guild,
+        config,
+        `Honeypot is now **ACTIVE** in <#${config.honeypotChannelId}>. Anyone who posts there (except staff) will be banned.`,
+      );
       return;
     }
 
@@ -229,23 +280,35 @@ client.on(Events.MessageCreate, async (message) => {
 
     // message.member can be absent for uncached authors, but the Administrator
     // and bannable checks below both depend on having it.
+    const who = `${message.author.tag} (${message.author.id})`;
+
     let member = message.member;
     if (!member) {
       try {
         member = await guild.members.fetch(message.author.id);
       } catch (err) {
-        console.warn(`[ban] Could not fetch member ${message.author.id}:`, err);
+        gWarn('ban', guild, `fetching member ${who}`, err);
       }
     }
 
     if (member?.permissions?.has(PermissionFlagsBits.Administrator)) return;
 
+    gInfo('detect', guild, `honeypot triggered by ${who}, message ${message.id}`);
+
     // Banning someone who outranks the bot throws; skipping keeps the process
     // alive and surfaces the misconfiguration in the logs instead of crashing.
     if (!member || !member.bannable) {
-      console.warn(
-        `[ban] Skipping ${message.author.tag} (${message.author.id}) in guild ${message.guildId}: ` +
-          'not bannable (outranks bot or unresolved member).',
+      gWarn(
+        'ban',
+        guild,
+        `banning ${who}`,
+        new Error('not bannable: target outranks bot or member could not be resolved'),
+      );
+      await sendGuildLog(
+        guild,
+        config,
+        `:warning: Honeypot triggered by **${message.author.tag}** (${message.author.id}) but the ban was ` +
+          'skipped: the target outranks the bot, or the member could not be resolved. Check the role hierarchy.',
       );
       return;
     }
@@ -253,8 +316,9 @@ client.on(Events.MessageCreate, async (message) => {
     // Delete first so the spam is gone even if the ban call later fails.
     try {
       await message.delete();
+      gInfo('detect', guild, `deleted trigger message ${message.id} from ${who}`);
     } catch (err) {
-      console.warn(`[ban] Failed to delete trigger message ${message.id}:`, err);
+      gWarn('detect', guild, `deleting trigger message ${message.id} from ${who}`, err);
     }
 
     // deleteMessageSeconds purges 7 days of their messages across every channel
@@ -264,18 +328,25 @@ client.on(Events.MessageCreate, async (message) => {
         deleteMessageSeconds: DELETE_MESSAGE_SECONDS,
         reason: BAN_REASON,
       });
-      console.log(
-        `[ban] Banned ${message.author.tag} (${message.author.id}) in guild ${message.guildId}.`,
+      gInfo('ban', guild, `banned ${who}, purged 7 days of messages`);
+      await sendGuildLog(
+        guild,
+        config,
+        `:hammer: Banned **${message.author.tag}** (${message.author.id}) for posting in the honeypot. ` +
+          'Their messages from the last 7 days were purged.',
       );
     } catch (err) {
-      console.error(
-        `[ban] Failed to ban ${message.author.tag} (${message.author.id}) in guild ${message.guildId}:`,
-        err,
+      gError('ban', guild, `banning ${who}`, err);
+      await sendGuildLog(
+        guild,
+        config,
+        `:warning: Honeypot triggered by **${message.author.tag}** (${message.author.id}) but the ban failed: ` +
+          `${err.message || err}. Check the bot's permissions and role position.`,
       );
     }
   } catch (err) {
     // Never let a message handler crash the process.
-    console.error('[messageCreate] Unexpected error:', err);
+    gError('messageCreate', message.guild, 'unexpected handler error', err);
   }
 });
 
@@ -311,6 +382,15 @@ process.once('SIGTERM', () => shutdown('SIGTERM'));
 
 // Prepare storage (create tables, open the connection) before connecting to
 // Discord, so the first message can't race an uninitialized store.
+async function pruneOldEvents() {
+  try {
+    const removed = await store.pruneEvents(LOG_RETENTION_DAYS);
+    if (removed > 0) console.log(`[store] Pruned ${removed} event(s) older than ${LOG_RETENTION_DAYS} days`);
+  } catch (err) {
+    console.error('[store] Failed to prune old events:', err);
+  }
+}
+
 (async () => {
   try {
     await store.init();
@@ -318,6 +398,9 @@ process.once('SIGTERM', () => shutdown('SIGTERM'));
     console.error('[fatal] Failed to initialize storage:', err);
     process.exit(1);
   }
+  await pruneOldEvents();
+  // unref() so a pending timer never holds the process open during shutdown.
+  setInterval(pruneOldEvents, PRUNE_INTERVAL_MS).unref();
   try {
     await client.login(TOKEN);
   } catch (err) {
