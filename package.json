@@ -1,0 +1,36 @@
+{
+  "name": "hunny",
+  "version": "1.0.0",
+  "description": "A Discord honeypot moderation bot: a trap channel that auto-bans anyone who posts in it, to catch compromised spam accounts.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "discord",
+    "discord-bot",
+    "discordjs",
+    "moderation",
+    "honeypot",
+    "anti-spam",
+    "security"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hardtokidnap/HUNNY.git"
+  },
+  "homepage": "https://github.com/hardtokidnap/HUNNY#readme",
+  "bugs": {
+    "url": "https://github.com/hardtokidnap/HUNNY/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "discord.js": "^14.16.3",
+    "pg": "^8.13.1"
+  }
+}

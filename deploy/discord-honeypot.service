@@ -1,0 +1,64 @@
+[Unit]
+Description=Discord honeypot moderation bot
+Documentation=https://github.com/hardtokidnap/HUNNY
+# Wait for the network to be usable before connecting to Discord.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# --- Adjust these to your setup ---
+# The Linux user the bot runs as (NOT root). On Raspberry Pi OS this is often "pi".
+User=pi
+# Absolute path to where you cloned the repo.
+WorkingDirectory=/home/pi/discord-honeypot
+# DISCORD_TOKEN is read from this file: a single line "DISCORD_TOKEN=...".
+# systemd reads it directly, so you do NOT need node --env-file here.
+EnvironmentFile=/home/pi/discord-honeypot/.env
+# Absolute path to node. Check yours with `which node`.
+# NodeSource installs land at /usr/bin/node; nvm installs differ.
+ExecStart=/usr/bin/node src/index.js
+
+# Restart on crash, with a short backoff. The process is built not to crash,
+# but if it ever exits, bring it back.
+Restart=on-failure
+RestartSec=5
+
+# --- Sandboxing: contain blast radius if the bot were ever compromised ---
+# The bot only needs outbound network + write access to its data dir, so it can
+# be locked down hard. Update the ReadWritePaths line if your repo path differs.
+NoNewPrivileges=true
+PrivateTmp=true
+# Whole filesystem read-only except the explicitly allowed data dir.
+ProtectSystem=strict
+ReadWritePaths=/home/pi/discord-honeypot/data
+ProtectHome=read-only
+ProtectProc=invisible
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+# The bot needs no Linux capabilities at all.
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+# OPTIONAL: block the bot from reaching your home LAN, so a compromised process
+# can't pivot to other devices on the network. Discord lives on public IPs, so
+# it keeps working. Leave this commented if your DNS resolver is on the LAN
+# (e.g. a Pi-hole on another box, or your router) -- it would block DNS. Safe to
+# enable when DNS is on localhost (127.0.0.1). See the README "Security and
+# hardening" section.
+#IPAddressDeny=10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 fc00::/7 fe80::/10
+
+[Install]
+WantedBy=multi-user.target

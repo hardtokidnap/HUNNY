@@ -1,0 +1,25 @@
+{
+  "name": "Discord Honeypot",
+  "description": "A trap channel that auto-bans anyone who posts in it, to catch compromised/spam accounts.",
+  "repository": "https://github.com/hardtokidnap/HUNNY",
+  "keywords": ["discord", "bot", "moderation", "honeypot", "anti-spam", "security"],
+  "stack": "heroku-24",
+  "buildpacks": [
+    { "url": "heroku/nodejs" }
+  ],
+  "addons": [
+    "heroku-postgresql:essential-0"
+  ],
+  "env": {
+    "DISCORD_TOKEN": {
+      "description": "Your Discord bot token from https://discord.com/developers/applications (Bot tab). Keep it secret.",
+      "required": true
+    }
+  },
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+}

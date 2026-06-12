@@ -1,0 +1,17 @@
+services:
+  honeypot:
+    build: .
+    image: discord-honeypot
+    container_name: discord-honeypot
+    restart: unless-stopped
+    # Run node under a minimal init so stop signals are delivered promptly.
+    init: true
+    # Reads DISCORD_TOKEN (and optional DATABASE_PATH) from a local .env file.
+    env_file:
+      - .env
+    # Persist the SQLite database across container restarts/rebuilds.
+    volumes:
+      - honeypot-data:/data
+
+volumes:
+  honeypot-data:
