@@ -86,6 +86,78 @@ const setupCommand = new SlashCommandBuilder()
       .setRequired(false),
   );
 
+// Every permission the /setup flow depends on, with live ok/missing state.
+function checkSetupPermissions(guild, channel, logChannel) {
+  const me = guild.members.me;
+  const has = (ch, flag) => ch.permissionsFor(me)?.has(flag) ?? false;
+  const checks = [
+    { label: `Server: Ban Members`, ok: me?.permissions.has(PermissionFlagsBits.BanMembers) ?? false },
+    { label: `<#${channel.id}>: View Channel`, ok: has(channel, PermissionFlagsBits.ViewChannel) },
+    {
+      label: `<#${channel.id}>: Manage Messages (pins the notice, deletes trigger messages)`,
+      ok: has(channel, PermissionFlagsBits.ManageMessages),
+    },
+    { label: `<#${channel.id}>: Read Message History`, ok: has(channel, PermissionFlagsBits.ReadMessageHistory) },
+  ];
+  if (logChannel) {
+    checks.push(
+      { label: `<#${logChannel.id}>: View Channel`, ok: has(logChannel, PermissionFlagsBits.ViewChannel) },
+      { label: `<#${logChannel.id}>: Send Messages`, ok: has(logChannel, PermissionFlagsBits.SendMessages) },
+    );
+  }
+  return checks;
+}
+
+const formatChecks = (checks) =>
+  checks.map((c) => `${c.ok ? ':white_check_mark:' : ':x:'} ${c.label}`).join('\n');
+
+// One poll loop per guild; a /setup re-run replaces the previous loop.
+const activePermPolls = new Map();
+const PERM_POLL_INTERVAL_MS = 60000;
+// 5 polls = ~5 minutes; the ephemeral reply stops being editable at 15.
+const PERM_POLL_LIMIT = 5;
+
+function startPermissionPoll(interaction, channel, logChannel, baseContent) {
+  const guildId = interaction.guildId;
+  activePermPolls.get(guildId)?.cancel();
+
+  let polls = 0;
+  let timer = null;
+  const cancel = () => {
+    if (timer) clearTimeout(timer);
+    activePermPolls.delete(guildId);
+  };
+  activePermPolls.set(guildId, { cancel });
+
+  const tick = async () => {
+    polls += 1;
+    const checks = checkSetupPermissions(interaction.guild, channel, logChannel);
+    const allOk = checks.every((c) => c.ok);
+    const status = allOk
+      ? ':white_check_mark: **All permissions in place.** Post the anchor message when ready.'
+      : polls >= PERM_POLL_LIMIT
+        ? ':x: **Still missing permissions.** Stopped checking; fix them and re-run /setup to verify.'
+        : `Re-checking every minute (${polls}/${PERM_POLL_LIMIT})...`;
+    try {
+      await interaction.editReply(`${baseContent}\n\n**Permission check**\n${formatChecks(checks)}\n\n${status}`);
+    } catch (err) {
+      gWarn('setup', interaction.guild, 'updating the permission checklist', err);
+      cancel();
+      return;
+    }
+    if (allOk || polls >= PERM_POLL_LIMIT) {
+      if (allOk) gInfo('setup', interaction.guild, 'permission checklist all green');
+      cancel();
+      return;
+    }
+    timer = setTimeout(tick, PERM_POLL_INTERVAL_MS);
+    timer.unref?.();
+  };
+
+  timer = setTimeout(tick, PERM_POLL_INTERVAL_MS);
+  timer.unref?.();
+}
+
 // In-guild activity feed for server staff. Best-effort by design: a missing
 // channel or missing Send Messages permission must never affect the ban flow.
 async function sendGuildLog(guild, config, text) {
@@ -129,6 +201,7 @@ client.on(Events.GuildCreate, async (guild) => {
 // deleted, so the database only ever holds servers the bot is actually in.
 client.on(Events.GuildDelete, async (guild) => {
   try {
+    activePermPolls.get(guild.id)?.cancel();
     await store.deleteGuild(guild.id);
     gInfo('cleanup', guild, 'removed config for departed guild');
   } catch (err) {
@@ -177,37 +250,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ', awaiting anchor',
     );
 
-    // Catch the silent-notice failure mode up front: without Send Messages in
-    // the log channel, staff would never learn why notices don't arrive.
-    const canPostNotices =
-      !logChannel ||
-      (logChannel.permissionsFor(interaction.guild.members.me)?.has(PermissionFlagsBits.SendMessages) ?? false);
+    const baseContent = [
+      `Honeypot channel set to <#${channel.id}>.`,
+      logChannel ? `Activity notices will be posted in <#${logChannel.id}>.` : null,
+      '',
+      '**Important:** the bot\'s role must sit **ABOVE** the roles of anyone it ' +
+        'should be able to ban. If a target outranks the bot, the ban silently fails.',
+      '',
+      `**Final step:** go to <#${channel.id}> and post **one** message now. ` +
+        'The bot will pin it as the permanent warning notice and flip the honeypot to ' +
+        '**ACTIVE**. That anchor message is never deleted and never triggers a ban.',
+    ].filter((line) => line !== null).join('\n');
+
+    const checks = checkSetupPermissions(interaction.guild, channel, logChannel);
+    const allOk = checks.every((c) => c.ok);
+    const status = allOk
+      ? ':white_check_mark: **All permissions in place.**'
+      : ':x: **Missing permissions found.** I will re-check every minute for 5 minutes and update this message.';
 
     await interaction.reply({
       flags: MessageFlags.Ephemeral,
-      content: [
-        `Honeypot channel set to <#${channel.id}>.`,
-        logChannel ? `Activity notices will be posted in <#${logChannel.id}>.` : null,
-        canPostNotices
-          ? null
-          : `:warning: I don't have **Send Messages** in <#${logChannel.id}>, so notices will fail ` +
-            'until that permission is granted.',
-        '',
-        '**Permissions this bot needs:**',
-        '- Ban Members',
-        '- Manage Messages',
-        '- View Channel',
-        '- Read Message History',
-        logChannel ? '- Send Messages (in the log channel)' : null,
-        '',
-        '**Important:** the bot\'s role must sit **ABOVE** the roles of anyone it ' +
-          'should be able to ban. If a target outranks the bot, the ban silently fails.',
-        '',
-        `**Final step:** go to <#${channel.id}> and post **one** message now. ` +
-          'The bot will pin it as the permanent warning notice and flip the honeypot to ' +
-          '**ACTIVE**. That anchor message is never deleted and never triggers a ban.',
-      ].filter((line) => line !== null).join('\n'),
+      content: `${baseContent}\n\n**Permission check**\n${formatChecks(checks)}\n\n${status}`,
     });
+
+    if (!allOk) startPermissionPoll(interaction, channel, logChannel, baseContent);
   } catch (err) {
     gError('setup', interaction.guild, 'handling /setup', err);
     // Best-effort error reply.
@@ -255,6 +321,12 @@ client.on(Events.MessageCreate, async (message) => {
         await message.pin();
       } catch (err) {
         gWarn('anchor', message.guild, `pinning anchor message ${message.id}`, err);
+        await sendGuildLog(
+          message.guild,
+          config,
+          `:warning: Could not pin the anchor message in <#${config.honeypotChannelId}> ` +
+            '(needs **Manage Messages** there). The honeypot still works, but the warning notice is not pinned.',
+        );
       }
 
       await store.setAnchor(message.guildId, message.id);
