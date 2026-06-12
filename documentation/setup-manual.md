@@ -36,6 +36,7 @@ it up if losing your `/setup` config would be annoying.
 
 ## Production note
 
-For anything long-running, use a supervisor that restarts on failure:
-[Docker](./setup-docker.md) or [systemd](./setup-raspberry-pi.md), both
-provided in this repo.
+A manually started `node` process does not survive a crash, a closed
+terminal, or a reboot. For anything long-running, use a supervisor that
+restarts on failure and starts on boot: [Docker](./setup-docker.md) or
+[systemd](./setup-raspberry-pi.md), both provided in this repo.

@@ -46,6 +46,16 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now discord-honeypot
 ```
 
+## Surviving reboots and crashes
+
+Both paths above already cover this: the unit ships `Restart=on-failure` with
+a 5 second backoff, and `systemctl enable --now` (run by the installer, and by
+you in the manual path) starts the service on every boot. Verify with:
+
+```bash
+systemctl is-enabled discord-honeypot   # "enabled" = starts on boot
+```
+
 ## Hardening notes
 
 The provided unit ships with strong sandboxing already applied

@@ -36,6 +36,13 @@ If you deploy manually instead of with the button, provision Postgres yourself:
 heroku addons:create heroku-postgresql:essential-0 -a <your-app>
 ```
 
+## Surviving restarts and crashes
+
+Nothing to configure: Heroku restarts crashed dynos automatically and cycles
+every dyno at least once a day, and the worker comes back on its own each
+time. Config survives because it lives in Heroku Postgres, not on the dyno.
+The bot only stays down if you scale the worker to 0 yourself.
+
 ## Logs
 
 ```bash

@@ -27,6 +27,24 @@ The SQLite database lives in a named Docker volume (`honeypot-data`), so it
 survives restarts and rebuilds. Back up that volume if losing your `/setup`
 config would be annoying.
 
+## Surviving reboots and crashes
+
+The compose file sets `restart: unless-stopped`, so Docker restarts the bot
+automatically after a crash and brings it back up when the host reboots. The
+one prerequisite is that Docker itself starts on boot:
+
+```bash
+# Linux / Raspberry Pi (once):
+sudo systemctl enable docker
+```
+
+On Docker Desktop (Windows/macOS), enable "Start Docker Desktop when you sign
+in" in its settings instead.
+
+The `unless-stopped` policy means the bot keeps coming back until you stop it
+yourself; `docker compose stop` keeps it down (also across reboots) until the
+next `docker compose up -d` or `docker compose start`.
+
 ## Updating
 
 ```bash
