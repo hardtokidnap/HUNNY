@@ -66,8 +66,12 @@ async function setAnchor(guildId, messageId) {
   await pool.query('UPDATE guilds SET anchor_message_id = $1 WHERE guild_id = $2', [messageId, guildId]);
 }
 
+async function deleteGuild(guildId) {
+  await pool.query('DELETE FROM guilds WHERE guild_id = $1', [guildId]);
+}
+
 async function close() {
   await pool.end();
 }
 
-module.exports = { init, getGuild, setHoneypot, setAnchor, close };
+module.exports = { init, getGuild, setHoneypot, setAnchor, deleteGuild, close };

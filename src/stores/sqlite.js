@@ -21,6 +21,7 @@ db.pragma('synchronous = NORMAL');
 let selectStmt;
 let upsertHoneypotStmt;
 let setAnchorStmt;
+let deleteGuildStmt;
 
 async function init() {
   db.exec(`
@@ -49,6 +50,8 @@ async function init() {
 
   setAnchorStmt = db.prepare('UPDATE guilds SET anchor_message_id = ? WHERE guild_id = ?');
 
+  deleteGuildStmt = db.prepare('DELETE FROM guilds WHERE guild_id = ?');
+
   console.log(`[store] Using SQLite at ${DB_FILE}`);
 }
 
@@ -74,9 +77,13 @@ async function setAnchor(guildId, messageId) {
   setAnchorStmt.run(messageId, guildId);
 }
 
+async function deleteGuild(guildId) {
+  deleteGuildStmt.run(guildId);
+}
+
 async function close() {
   // Checkpoints the WAL and releases the file lock.
   db.close();
 }
 
-module.exports = { init, getGuild, setHoneypot, setAnchor, close };
+module.exports = { init, getGuild, setHoneypot, setAnchor, deleteGuild, close };

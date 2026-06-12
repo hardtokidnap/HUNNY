@@ -100,6 +100,17 @@ client.on(Events.GuildCreate, async (guild) => {
   await registerCommandsForGuild(guild);
 });
 
+// Privacy: drop the guild's config the moment the bot is kicked or the guild is
+// deleted, so the database only ever holds servers the bot is actually in.
+client.on(Events.GuildDelete, async (guild) => {
+  try {
+    await store.deleteGuild(guild.id);
+    console.log(`[cleanup] Removed config for departed guild ${guild.id}`);
+  } catch (err) {
+    console.error(`[cleanup] Failed to remove config for guild ${guild.id}:`, err);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // /setup handler
 // ---------------------------------------------------------------------------
