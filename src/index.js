@@ -15,6 +15,7 @@ const {
 
 const store = require('./store');
 const { gInfo, gWarn, gError } = require('./log');
+const { checkForUpdate } = require('./update-check');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 if (!TOKEN) {
@@ -471,8 +472,10 @@ async function pruneOldEvents() {
     process.exit(1);
   }
   await pruneOldEvents();
+  await checkForUpdate();
   // unref() so a pending timer never holds the process open during shutdown.
   setInterval(pruneOldEvents, PRUNE_INTERVAL_MS).unref();
+  setInterval(checkForUpdate, PRUNE_INTERVAL_MS).unref();
   try {
     await client.login(TOKEN);
   } catch (err) {

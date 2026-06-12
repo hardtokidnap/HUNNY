@@ -65,6 +65,7 @@ Environment variables only, never hardcoded:
 | `DATABASE_SSL` | No | Force TLS to Postgres `true` or `false`. Defaults to on for remote hosts and off for localhost. |
 | `DATABASE_PATH` | No | Path to the SQLite file (ignored when `DATABASE_URL` is set). Defaults to `data/honeypot.db`. |
 | `LOG_RETENTION_DAYS` | No | How many days of per-guild event history to keep in the database. Defaults to 30. |
+| `UPDATE_CHECK` | No | Set `false` to stop the daily check for a newer version on GitHub (an `[update]` log line, nothing else). Defaults to on. |
 
 The bot picks its storage backend at startup: PostgreSQL when `DATABASE_URL` is
 present, otherwise the local SQLite file.
@@ -120,7 +121,10 @@ A short checklist for running this (or any) Discord bot safely and reliably.
 5. Run it under a supervisor that restarts on failure (systemd or
    `docker compose` with `restart: unless-stopped`, both provided here) so a
    transient crash does not take the bot offline.
-6. Keep dependencies patched. Run `npm audit` periodically and rebuild.
+6. Keep dependencies patched. Run `npm audit` periodically and rebuild. The bot
+   checks GitHub daily and logs an `[update]` line when a newer version exists
+   (it never updates itself); update with `git pull && docker compose up -d
+   --build`.
 7. Watch the logs (`journalctl -u discord-honeypot -f` or `docker compose logs
    -f`) so failed bans (for example, a target outranking the bot) are visible.
 8. Back up the small SQLite database if losing your `/setup` config would be
