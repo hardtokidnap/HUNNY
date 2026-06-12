@@ -14,6 +14,9 @@ cd HUNNY
 cp .env.example .env        # then edit .env and paste your token
                             # (on Windows: copy .env.example .env)
 
+sudo usermod -aG docker $USER # If you are not logged in as root
+newgrp docker                 # To not have to relog after running command above
+
 docker compose up -d        # build and run in the background
 docker compose logs -f      # follow logs
 ```
