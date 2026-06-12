@@ -7,8 +7,7 @@ times may vary, but all contributions are welcome.
 
 ### Prerequisites
 
-- Node.js 20+ (the bot itself runs on 18+, but the `--env-file` dev command
-  below needs 20+)
+- Node.js 20+
 - A Discord bot application for testing (see
   [documentation/setup-bot.md](documentation/setup-bot.md))
 

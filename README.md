@@ -5,7 +5,7 @@
 A [honeypot(wikipedia)](https://en.wikipedia.org/wiki/Honeypot_(computing)) bot that auto-bans anyone who posts in a specific channel, purpose built to catch compromised
 or token-stolen accounts that mass-spam every channel across several public Discord communities.
 
-![Node](https://img.shields.io/badge/node-%3E%3D18-green)
+![Node](https://img.shields.io/badge/node-%3E%3D20-green)
 ![discord.js](https://img.shields.io/badge/discord.js-v14-blue)
 ![Storage](https://img.shields.io/badge/storage-SQLite%20%7C%20Postgres-003B57)
 ![License](https://img.shields.io/badge/license-Apache--2.0%20with%20Commons%20Clause-lightgrey)
@@ -25,7 +25,7 @@ hit the trap first, so this stops them before they finish.
 - Tiny RAM footprint. Idles around 80 to 150 MB and stays flat even on very
   large servers, because members are fetched on demand and caches are bounded
   with sweepers (it never loads the full member list).
-- Cross-platform. Runs anywhere Node 18+ or Docker runs: Linux, macOS, and
+- Cross-platform. Runs anywhere Node 20+ or Docker runs: Linux, macOS, and
   Windows, on x86-64 and arm64 (including a Raspberry Pi).
 - Safe. Ignores staff (Administrator permission) and the pinned notice, and never crashes on a failed ban.
 

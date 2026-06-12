@@ -1,6 +1,6 @@
 # Manual (Node) setup
 
-For local dev and testing on any OS. Requires Node 18+ (Node 20+ recommended).
+For local dev and testing on any OS. Requires Node 20+.
 Works the same on Linux, macOS, and Windows; `better-sqlite3` ships prebuilt
 binaries for all three, so no build toolchain is needed.
 

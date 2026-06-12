@@ -33,13 +33,13 @@ if ! command -v node >/dev/null 2>&1; then
   need_node=true
 else
   major="$(node -p 'process.versions.node.split(".")[0]')"
-  if [ "${major}" -lt 18 ]; then need_node=true; fi
+  if [ "${major}" -lt 20 ]; then need_node=true; fi
 fi
 
 if [ "${need_node}" = true ]; then
   echo "==> Installing Node 20 LTS via NodeSource..."
   # This pipes a NodeSource script into a root shell. It's the official install
-  # method, but if you'd rather not curl|bash as root, install Node 18+ yourself
+  # method, but if you'd rather not curl|bash as root, install Node 20+ yourself
   # beforehand and this step is skipped.
   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
   sudo apt-get install -y nodejs

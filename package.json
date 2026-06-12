@@ -1,6 +1,6 @@
 {
   "name": "hunny",
-  "version": "1.2.2",
+  "version": "2.0.0",
   "description": "A Discord honeypot moderation bot: a trap channel that auto-bans anyone who posts in it, to catch compromised spam accounts.",
   "main": "src/index.js",
   "type": "commonjs",
@@ -25,7 +25,7 @@
     "url": "https://github.com/hardtokidnap/HUNNY/issues"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
