@@ -9,6 +9,10 @@ or token-stolen accounts that mass-spam every channel across several public Disc
 ![discord.js](https://img.shields.io/badge/discord.js-v14-blue)
 ![Storage](https://img.shields.io/badge/storage-SQLite%20%7C%20Postgres-003B57)
 ![License](https://img.shields.io/badge/license-Apache--2.0%20with%20Commons%20Clause-lightgrey)
+![Discord](https://img.shields.io/badge/hosted%20instance-discord%20verified-5865F2?logo=discord&logoColor=white)
+
+[![Invite Hunny](https://img.shields.io/badge/Invite%20Hunny%20to%20your%20server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1515012645315678348)
+No hosting needed; see [Usage](#usage) for the 3-step setup.
 
 You designate one honeypot channel. Any non-staff member who posts in it is
 deleted and banned on the spot, with 7 days of their messages purged
@@ -39,13 +43,18 @@ hit the trap first, so this stops them before they finish.
 If a target outranks the bot (`member.bannable === false`), the ban is skipped
 and a warning is logged instead of crashing.
 
-## Just want the bot in your server?
-
-[**Invite Hunny**](https://discord.com/oauth2/authorize?client_id=1515012645315678348)
-and skip straight to [Usage](#usage). The rest of this page is for people
-hosting their own instance.
-
 ## Setup
+
+Just want the bot in your server? Use the invite button at the top and skip
+straight to [Usage](#usage). The invite adds the maintainer's hosted
+instance, which is a Discord-verified app running exactly the code in this
+repo, requesting only the six permissions it needs, with a published
+[Terms of Service](./documentation/TERMS%20OF%20SERVICE.txt) and
+[Privacy Policy](./documentation/PRIVACY%20POLICY.txt).
+
+The rest of this page is for people hosting their own instance. A
+self-hosted copy runs under your own Discord application, so the verified
+status applies only to the hosted instance, not to the code or to forks.
 
 First, [create the Discord bot](./documentation/setup-bot.md) (token, intents,
 invite, role hierarchy). Then pick a hosting method:
