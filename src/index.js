@@ -1,7 +1,11 @@
 'use strict';
 
 const {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   Client,
+  ComponentType,
   GatewayIntentBits,
   Partials,
   Events,
@@ -95,8 +99,13 @@ function checkSetupPermissions(guild, channel, logChannel) {
     { label: `Server: Ban Members`, ok: me?.permissions.has(PermissionFlagsBits.BanMembers) ?? false },
     { label: `<#${channel.id}>: View Channel`, ok: has(channel, PermissionFlagsBits.ViewChannel) },
     {
-      label: `<#${channel.id}>: Manage Messages (pins the notice, deletes trigger messages)`,
+      label: `<#${channel.id}>: Manage Messages (deletes trigger messages)`,
       ok: has(channel, PermissionFlagsBits.ManageMessages),
+    },
+    {
+      // Discord split pinning out of Manage Messages; either grants it today.
+      label: `<#${channel.id}>: Pin Messages (pins the warning notice)`,
+      ok: has(channel, PermissionFlagsBits.PinMessages) || has(channel, PermissionFlagsBits.ManageMessages),
     },
     { label: `<#${channel.id}>: Read Message History`, ok: has(channel, PermissionFlagsBits.ReadMessageHistory) },
   ];
@@ -159,6 +168,35 @@ function startPermissionPoll(interaction, channel, logChannel, baseContent) {
   timer.unref?.();
 }
 
+// Latest /setup reply per guild, so activation can update the ephemeral. Tokens
+// die after 15 min; later edits fail quietly and the log channel carries the news.
+const pendingSetupReplies = new Map();
+
+// Single activation point for both anchor paths (fresh post, existing pin).
+async function activateHoneypot(guild, config, messageId, how) {
+  await store.setAnchor(guild.id, messageId);
+  gInfo('anchor', guild, `honeypot ACTIVE, anchor ${messageId} (${how})`);
+  await sendGuildLog(
+    guild,
+    config,
+    `Honeypot is now **ACTIVE** in <#${config.honeypotChannelId}>. Anyone who posts there (except users with the Administrator role) will be banned.`,
+  );
+
+  const pending = pendingSetupReplies.get(guild.id);
+  if (!pending) return;
+  pendingSetupReplies.delete(guild.id);
+  activePermPolls.get(guild.id)?.cancel();
+  const checks = checkSetupPermissions(guild, pending.channel, pending.logChannel);
+  try {
+    await pending.interaction.editReply(
+      `${pending.baseContent}\n\n**Permission check**\n${formatChecks(checks)}\n\n` +
+        `:white_check_mark: **Honeypot is ACTIVE** in <#${config.honeypotChannelId}>. Setup complete.`,
+    );
+  } catch (err) {
+    gWarn('setup', guild, 'updating the setup reply with the active status', err);
+  }
+}
+
 // In-guild activity feed for server staff. Best-effort by design: a missing
 // channel or missing Send Messages permission must never affect the ban flow.
 async function sendGuildLog(guild, config, text) {
@@ -203,6 +241,7 @@ client.on(Events.GuildCreate, async (guild) => {
 client.on(Events.GuildDelete, async (guild) => {
   try {
     activePermPolls.get(guild.id)?.cancel();
+    pendingSetupReplies.delete(guild.id);
     await store.deleteGuild(guild.id);
     gInfo('cleanup', guild, 'removed config for departed guild');
   } catch (err) {
@@ -241,6 +280,53 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const channel = interaction.options.getChannel('channel');
     const logChannel = interaction.options.getChannel('log_channel');
 
+    // Re-running /setup wipes the anchor and any previous channel choice, so an
+    // existing config gets a Yes/No confirmation before anything is touched.
+    const existing = await store.getGuild(interaction.guildId);
+    let respond = (content) => interaction.reply({ content, flags: MessageFlags.Ephemeral });
+
+    if (existing) {
+      const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('setup_confirm').setLabel('Yes, reset it').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('setup_cancel').setLabel('No, keep it').setStyle(ButtonStyle.Secondary),
+      );
+      await interaction.reply({
+        flags: MessageFlags.Ephemeral,
+        components: [buttons],
+        content:
+          `This server already has a honeypot in <#${existing.honeypotChannelId}> ` +
+          `(${existing.active ? 'ACTIVE' : 'awaiting anchor'}). Re-running /setup **resets it**: ` +
+          'the current configuration is replaced and the honeypot stays inactive until a new ' +
+          'warning notice is pinned or posted. Continue?',
+      });
+
+      const warningMessage = await interaction.fetchReply();
+      let click;
+      try {
+        click = await warningMessage.awaitMessageComponent({
+          componentType: ComponentType.Button,
+          time: 60000,
+        });
+      } catch (_) {
+        await interaction.editReply({
+          content: 'No answer within a minute. Kept the existing configuration; nothing changed.',
+          components: [],
+        });
+        return;
+      }
+
+      if (click.customId === 'setup_cancel') {
+        await click.update({
+          content: 'Kept the existing configuration. Nothing changed.',
+          components: [],
+        });
+        gInfo('setup', interaction.guild, `re-run cancelled by ${interaction.user.tag} (${interaction.user.id})`);
+        return;
+      }
+
+      respond = (content) => click.update({ content, components: [] });
+    }
+
     await store.setHoneypot(interaction.guildId, channel.id, interaction.user.id, logChannel?.id ?? null);
 
     gInfo(
@@ -258,9 +344,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       '**Important:** the bot\'s role must sit **ABOVE** the roles of anyone it ' +
         'should be able to ban. If a target outranks the bot, the ban silently fails.',
       '',
-      `**Final step:** go to <#${channel.id}> and post **one** message now. ` +
-        'The bot will pin it as the permanent warning notice and flip the honeypot to ' +
-        '**ACTIVE**. That anchor message is never deleted and never triggers a ban.',
+      `**Final step:** go to <#${channel.id}> and either **pin an existing message** ` +
+        '(if you set up the channel before inviting the bot), or **post one new message** ' +
+        'that the bot will pin. That message becomes the permanent warning notice and sets ' +
+        'the honeypot to **ACTIVE**. It is never deleted and never triggers a ban.',
     ].filter((line) => line !== null).join('\n');
 
     const checks = checkSetupPermissions(interaction.guild, channel, logChannel);
@@ -269,11 +356,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       ? ':white_check_mark: **All permissions in place.**'
       : ':x: **Missing permissions found.** I will re-check every minute for 5 minutes and update this message.';
 
-    await interaction.reply({
-      flags: MessageFlags.Ephemeral,
-      content: `${baseContent}\n\n**Permission check**\n${formatChecks(checks)}\n\n${status}`,
-    });
+    await respond(`${baseContent}\n\n**Permission check**\n${formatChecks(checks)}\n\n${status}`);
 
+    pendingSetupReplies.set(interaction.guildId, { interaction, baseContent, channel, logChannel });
     if (!allOk) startPermissionPoll(interaction, channel, logChannel, baseContent);
   } catch (err) {
     gError('setup', interaction.guild, 'handling /setup', err);
@@ -293,6 +378,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } catch (_) {
       /* swallow */
     }
+  }
+});
+
+// Alternate anchor path: staff pin an existing message (channel was set up
+// before the bot was invited). Only staff can pin, so Discord itself gates this.
+client.on(Events.ChannelPinsUpdate, async (channel) => {
+  try {
+    if (!channel.guildId) return;
+    const config = await store.getGuild(channel.guildId);
+    if (!config?.awaitingAnchor) return;
+    if (channel.id !== config.honeypotChannelId) return;
+
+    let pins;
+    try {
+      pins = await channel.messages.fetchPins();
+    } catch (err) {
+      gWarn('anchor', channel.guild, 'fetching pins to adopt an anchor', err);
+      return;
+    }
+    if (!pins.items.length) return;
+
+    const newest = pins.items.reduce((a, b) => (b.pinnedTimestamp > a.pinnedTimestamp ? b : a));
+    await activateHoneypot(channel.guild, config, newest.message.id, 'existing pin adopted');
+  } catch (err) {
+    gError('pins', channel.guild ?? null, 'unexpected handler error', err);
   }
 });
 
@@ -318,6 +428,30 @@ client.on(Events.MessageCreate, async (message) => {
       // and thereby choosing a message that can never be banned.
       if (message.author.id !== config.setupUserId) return;
 
+      // Activate before pinning: our own pin fires ChannelPinsUpdate, and the
+      // adoption handler must already see the anchor as set.
+      await activateHoneypot(message.guild, config, message.id, 'posted by setup user');
+
+      const perms = message.channel.permissionsFor(message.guild.members.me);
+      const canPin =
+        (perms?.has(PermissionFlagsBits.PinMessages) ?? false) ||
+        (perms?.has(PermissionFlagsBits.ManageMessages) ?? false);
+      if (!canPin) {
+        gWarn(
+          'anchor',
+          message.guild,
+          `pinning anchor message ${message.id}`,
+          new Error('missing Pin Messages permission, did not attempt'),
+        );
+        await sendGuildLog(
+          message.guild,
+          config,
+          `:warning: Could not pin the anchor message in <#${config.honeypotChannelId}> ` +
+            '(needs **Pin Messages** there). The honeypot still works, but the warning notice is not pinned.',
+        );
+        return;
+      }
+
       try {
         await message.pin();
       } catch (err) {
@@ -325,19 +459,10 @@ client.on(Events.MessageCreate, async (message) => {
         await sendGuildLog(
           message.guild,
           config,
-          `:warning: Could not pin the anchor message in <#${config.honeypotChannelId}> ` +
-            '(needs **Manage Messages** there). The honeypot still works, but the warning notice is not pinned.',
+          `:warning: Could not pin the anchor message in <#${config.honeypotChannelId}>. ` +
+            'The honeypot still works, but the warning notice is not pinned.',
         );
       }
-
-      await store.setAnchor(message.guildId, message.id);
-
-      gInfo('anchor', message.guild, `honeypot ACTIVE, anchor ${message.id}`);
-      await sendGuildLog(
-        message.guild,
-        config,
-        `Honeypot is now **ACTIVE** in <#${config.honeypotChannelId}>. Anyone who posts there (except staff) will be banned.`,
-      );
       return;
     }
 
