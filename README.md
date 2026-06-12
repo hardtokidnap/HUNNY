@@ -1,6 +1,6 @@
 # Hunny
 
-<img width="974" height="357" alt="Hunnybanner" src="documentation/Hunnybanner.jpg" />
+<img width="680" height="240" alt="Hunnybanner" src="documentation/Hunnybanner.png" />
 
 A [honeypot(wikipedia)](https://en.wikipedia.org/wiki/Honeypot_(computing)) bot that auto-bans anyone who posts in a specific channel, purpose built to catch compromised
 or token-stolen accounts that mass-spam every channel across several public Discord communities.
