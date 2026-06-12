@@ -1,0 +1,114 @@
+HUNNY - PRIVACY POLICY
+
+Last updated: 2026-06-12
+Repository: https://github.com/hardtokidnap/HUNNY
+
+This policy describes what the bot stores, what passes through it without
+being stored, and what the person hosting it (the "Operator") can see. It
+applies to the public instance run by the repository maintainer; if you
+self-host, you are the Operator of your copy and this policy describes
+your instance, with you responsible for it.
+
+
+1. WHAT IS STORED IN THE DATABASE
+
+One row per server, four fields, nothing else:
+
+  guild_id             The Discord server ID.
+  honeypot_channel_id  The ID of the designated trap channel.
+  setup_user_id        The Discord user ID of the staff member who ran
+                       /setup. Kept so the bot knows whose message to pin
+                       as the warning notice, including across restarts.
+  anchor_message_id    The message ID of the pinned warning notice. Empty
+                       until the notice is posted.
+
+These are Discord snowflake IDs (numbers). The database contains no
+message content, no usernames, no member lists, no avatars, and no record
+of who was banned.
+
+Storage backend is a local SQLite file or a PostgreSQL database chosen by
+the Operator. Either way the data above is all there is.
+
+
+2. WHAT IS PROCESSED BUT NEVER STORED
+
+The bot uses Discord's Message Content intent, so Discord's gateway
+delivers message events (including their text) for channels the bot can
+read. The bot looks at exactly two things in memory: which channel the
+message is in, and who wrote it. If the message is not in that server's
+honeypot channel it is ignored and discarded. Message text is never
+written to the database, never written to logs, and never sent anywhere.
+
+When a ban fires, the bot asks Discord to delete the member's messages
+from the last 7 days. That deletion happens inside Discord; the bot never
+receives or retains the deleted content.
+
+
+3. WHAT APPEARS IN LOGS
+
+The bot writes operational logs to standard output only. It creates no
+log files of its own. Log lines can contain:
+
+- Server IDs and channel IDs (setup, activation, cleanup events).
+- The Discord tag and user ID of a banned member, or of a member whose
+  ban was skipped because of role hierarchy.
+- Error details from the Discord API.
+
+How long these lines live depends entirely on where the Operator runs the
+bot (journald, Docker log driver, a cloud platform's log retention). The
+Operator controls that retention.
+
+
+4. WHAT THE OPERATOR CAN SEE
+
+Whoever hosts the bot has full access to its backend. Concretely, the
+Operator can read:
+
+- The database rows described in section 1.
+- The log stream described in section 3.
+- Anything the bot account itself can see in Discord under the
+  permissions your server granted it (channel names, member presence in
+  shared servers, and so on), the same as any bot you invite.
+
+The Operator cannot read your server's message history through this
+software: the code never requests it beyond the live events described in
+section 2. A modified fork could behave differently; this policy covers
+the code as published in this repository.
+
+
+5. WHERE BAN RECORDS LIVE
+
+The ban itself is a Discord action. It appears in your server's audit log
+and ban list, both held by Discord and governed by Discord's own privacy
+policy. Unbanning is a normal server-admin action and is not blocked by
+the bot in any way.
+
+
+6. DATA SHARING
+
+None. No analytics, no telemetry, no advertising, no sale of data, no
+third-party services. The bot talks to exactly two parties: Discord's API
+and the Operator's own database.
+
+
+7. RETENTION AND DELETION
+
+- Kicking or banning the bot from your server deletes that server's row
+  from the database automatically, immediately.
+- Running /setup again overwrites the previous configuration.
+- For anything else (for example, you removed the bot while it was
+  offline and want to confirm the row is gone), open an issue:
+  https://github.com/hardtokidnap/HUNNY/issues
+
+
+8. AGE
+
+The bot is a Discord application and follows Discord's minimum age
+requirements. It is not directed at children and stores no personal data
+beyond the IDs listed in section 1.
+
+
+9. CHANGES TO THIS POLICY
+
+This policy is versioned in the repository's git history; the commit log
+of this file is the change log.

@@ -6,7 +6,7 @@ or token-stolen accounts that mass-spam every channel.
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
 ![discord.js](https://img.shields.io/badge/discord.js-v14-blue)
 ![Storage](https://img.shields.io/badge/storage-SQLite%20%7C%20Postgres-003B57)
-![License](https://img.shields.io/badge/license-Apache--2.0-lightgrey)
+![License](https://img.shields.io/badge/license-Apache--2.0%20with%20Commons%20Clause-lightgrey)
 
 You designate one honeypot channel. Any non-staff member who posts in it is
 deleted and banned on the spot, with 7 days of their messages purged
@@ -274,6 +274,14 @@ Minimal by design: just the bot process, the `/setup` flow, the ban handler, and
 the persistence layer (SQLite or Postgres). No web server, no dashboard, no extra
 commands.
 
+## Terms and privacy
+
+- [Terms of Service](./documentation/TERMS%20OF%20SERVICE.txt)
+- [Privacy Policy](./documentation/PRIVACY%20POLICY.txt)
+
 ## License
 
-[Apache-2.0](./LICENSE)
+[Apache-2.0 with Commons Clause](./LICENSE). In short: fork it, modify it,
+self-host it, keep the attribution and change notices Apache requires, but you
+may not sell the software or charge for hosting, support, or any product whose
+value comes substantially from it.

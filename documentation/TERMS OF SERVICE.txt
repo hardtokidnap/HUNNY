@@ -1,0 +1,98 @@
+HUNNY - TERMS OF SERVICE
+
+Last updated: 2026-06-12
+Repository: https://github.com/hardtokidnap/HUNNY
+
+
+1. WHAT THESE TERMS COVER
+
+HUNNY is a Discord moderation bot. It watches one designated "honeypot"
+channel per server and automatically bans any non-staff member who posts
+there, deleting their messages.
+
+These terms apply to the public instance of the bot operated by the
+repository maintainer (hardtokidnap, "the Operator"). If you self-host the
+bot from this repository, you become the Operator of your own instance and
+these terms apply to your instance with you in that role.
+
+
+2. ACCEPTANCE
+
+By adding the bot to a Discord server, or by keeping it in a server you
+administer, you agree to these terms on behalf of that server.
+
+Regular members do not need to accept anything: the honeypot channel is
+marked by a pinned warning notice, and posting in that channel after the
+notice is pinned is treated as triggering the trap.
+
+
+3. THE SERVICE
+
+- Server staff designate one text channel as the honeypot using /setup
+  (restricted to the server owner and Administrators).
+- The setup user posts one message in that channel. The bot pins it as the
+  permanent warning notice. From that point the honeypot is active.
+- Any non-exempt member who posts in the active honeypot channel is banned
+  and their messages from the last 7 days are deleted server-wide.
+- Exempt: bots, the server owner, members with the Administrator
+  permission, and the pinned notice itself.
+
+The bot acts with the permissions your server granted it when it was
+invited. Every ban is executed under your server's own authority.
+
+
+4. YOUR RESPONSIBILITIES AS SERVER STAFF
+
+- Keep the pinned warning notice in place so members are informed.
+- Keep the bot's role positioned correctly. The bot cannot ban anyone
+  whose highest role is at or above its own; those bans are skipped and
+  logged, not retried.
+- Moderation outcomes are yours. The bot is a tool that executes the rule
+  you configured; reviewing and reversing bans (Server Settings, Bans) is
+  your job and entirely possible at any time.
+- Do not use the bot to trap or harass specific people, and do not use it
+  in any way that violates Discord's Terms of Service or Community
+  Guidelines.
+
+
+5. AVAILABILITY AND TERMINATION
+
+The service is provided free of charge with no uptime guarantee. The
+Operator may remove the bot from any server or shut down the instance at
+any time. You may remove the bot from your server at any time; doing so
+deletes your server's stored configuration automatically (see the Privacy
+Policy).
+
+
+6. SOURCE CODE AND FORKS
+
+The source code is licensed under Apache License 2.0 with the Commons
+Clause (see the LICENSE file). In short:
+
+- You may fork, modify, and self-host the bot.
+- You must keep the attribution notices, and modified files must carry
+  prominent notices stating that you changed them, as required by the
+  Apache License.
+- You may not sell the software or charge for hosting, support, or any
+  product or service whose value derives substantially from it.
+
+
+7. DISCLAIMER OF WARRANTY AND LIABILITY
+
+The software and the service are provided "AS IS", without warranty of any
+kind, as set out in the Apache License 2.0. To the maximum extent permitted
+by law, the Operator is not liable for moderation outcomes, including bans
+of accounts that were not compromised, missed bans, downtime, or data loss.
+
+
+8. CHANGES TO THESE TERMS
+
+These terms are versioned in the repository's git history. Material changes
+appear in the commit log of this file. Continued use of the bot after a
+change constitutes acceptance.
+
+
+9. CONTACT
+
+Questions, complaints, and requests go through GitHub issues:
+https://github.com/hardtokidnap/HUNNY/issues
