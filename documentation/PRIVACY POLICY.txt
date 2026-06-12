@@ -12,7 +12,8 @@ your instance, with you responsible for it.
 
 1. WHAT IS STORED IN THE DATABASE
 
-One row per server, four fields, nothing else:
+Two tables. The first holds configuration, one row per server, five
+fields:
 
   guild_id             The Discord server ID.
   honeypot_channel_id  The ID of the designated trap channel.
@@ -21,10 +22,21 @@ One row per server, four fields, nothing else:
                        as the warning notice, including across restarts.
   anchor_message_id    The message ID of the pinned warning notice. Empty
                        until the notice is posted.
+  log_channel_id       The ID of the optional channel where the bot posts
+                       activation and ban notices. Empty unless server
+                       staff configured one during /setup.
 
-These are Discord snowflake IDs (numbers). The database contains no
-message content, no usernames, no member lists, no avatars, and no record
-of who was banned.
+The second is an event log, kept so the Operator can review what the bot
+did per server without relying on host log files. Each entry holds the
+server ID, a timestamp, a severity level, an event type, and a short
+description of the action or failure. Descriptions can include the
+Discord tag and user ID of a member who triggered the honeypot, was
+banned, or whose ban failed, the tag and user ID of the staff member who
+ran /setup, and error reasons from the Discord API.
+
+Event log entries are deleted automatically after 30 days (the Operator
+can configure a different retention period). The database contains no
+message content, no member lists, and no avatars.
 
 Storage backend is a local SQLite file or a PostgreSQL database chosen by
 the Operator. Either way the data above is all there is.
@@ -49,9 +61,11 @@ receives or retains the deleted content.
 The bot writes operational logs to standard output only. It creates no
 log files of its own. Log lines can contain:
 
-- Server IDs and channel IDs (setup, activation, cleanup events).
-- The Discord tag and user ID of a banned member, or of a member whose
-  ban was skipped because of role hierarchy.
+- Server names and server IDs, plus channel IDs (setup, activation, and
+  cleanup events).
+- The Discord tag and user ID of the staff member who ran /setup.
+- The Discord tag and user ID of a member who triggered the honeypot,
+  was banned, or whose ban was skipped or failed, with the reason.
 - Error details from the Discord API.
 
 How long these lines live depends entirely on where the Operator runs the
@@ -83,6 +97,13 @@ and ban list, both held by Discord and governed by Discord's own privacy
 policy. Unbanning is a normal server-admin action and is not blocked by
 the bot in any way.
 
+If server staff configured a log channel during /setup, the bot also
+posts notices there (honeypot activated, member banned with their tag and
+user ID, ban failed and why). Those messages are ordinary Discord
+messages in a channel your server controls: server staff decide who can
+read them and can delete them at any time, and they are otherwise
+governed by Discord's own privacy policy.
+
 
 6. DATA SHARING
 
@@ -93,11 +114,15 @@ and the Operator's own database.
 
 7. RETENTION AND DELETION
 
-- Kicking or banning the bot from your server deletes that server's row
-  from the database automatically, immediately.
+- Kicking or banning the bot from your server deletes that server's
+  configuration row and all of its event log entries automatically,
+  immediately.
+- Event log entries expire automatically after 30 days by default; the
+  Operator controls the exact retention period.
 - Running /setup again overwrites the previous configuration.
 - For anything else (for example, you removed the bot while it was
-  offline and want to confirm the row is gone), open an issue:
+  offline and want to confirm the data is gone, or you want your user ID
+  removed from a server's event log), open an issue:
   https://github.com/hardtokidnap/HUNNY/issues
 
 
@@ -105,7 +130,7 @@ and the Operator's own database.
 
 The bot is a Discord application and follows Discord's minimum age
 requirements. It is not directed at children and stores no personal data
-beyond the IDs listed in section 1.
+beyond what section 1 describes.
 
 
 9. CHANGES TO THIS POLICY

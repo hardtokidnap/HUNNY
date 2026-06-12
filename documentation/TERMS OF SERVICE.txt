@@ -36,6 +36,9 @@ notice is pinned is treated as triggering the trap.
   and their messages from the last 7 days are deleted server-wide.
 - Exempt: bots, the server owner, members with the Administrator
   permission, and the pinned notice itself.
+- Optionally, staff can pick a log channel during /setup; the bot posts
+  activation and ban notices there so moderation activity is visible to
+  the server.
 
 The bot acts with the permissions your server granted it when it was
 invited. Every ban is executed under your server's own authority.
