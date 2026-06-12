@@ -1,6 +1,6 @@
 {
   "name": "hunny",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A Discord honeypot moderation bot: a trap channel that auto-bans anyone who posts in it, to catch compromised spam accounts.",
   "main": "src/index.js",
   "type": "commonjs",

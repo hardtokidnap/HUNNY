@@ -415,6 +415,9 @@ client.on(Events.MessageCreate, async (message) => {
     // Compromised accounts post as users, never bots; skipping bots also stops
     // the handler from reacting to our own anchor pin.
     if (message.author?.bot) return;
+    // System messages (pin notices, boosts, joins) carry a member as author but
+    // are posted by Discord: never an anchor candidate, never a ban trigger.
+    if (message.system) return;
     // DMs carry no per-guild honeypot config.
     if (!message.guildId) return;
 
