@@ -19,10 +19,10 @@ flow):
    Install unchecked; the bot only works installed to a server.
 2. Under Default Install Settings, Guild Install, set scopes
    `applications.commands` and `bot`, and permissions **Ban Members**,
-   **Manage Messages**, **View Channel**, **Read Message History**, and
-   **Send Messages** (Send Messages is only used for the optional
-   `/setup log_channel` notices; you can drop it and grant it per-channel
-   instead).
+   **Manage Messages**, **Pin Messages**, **View Channels**,
+   **Read Message History**, and **Send Messages** (Send Messages is only
+   used for the optional `/setup log_channel` notices; you can drop it and
+   grant it per-channel instead).
 3. Copy the Install Link and open it to add the bot to your server. The same
    link is your permanent, shareable invite.
 

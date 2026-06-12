@@ -1,7 +1,9 @@
 # Hunny
 
-A trap channel that auto-bans anyone who posts in it, built to catch compromised
-or token-stolen accounts that mass-spam every channel.
+<img width="974" height="357" alt="Hunnybanner" src="documentation/Hunnybanner.jpg" />
+
+A [honeypot(wikipedia)](https://en.wikipedia.org/wiki/Honeypot_(computing)) bot that auto-bans anyone who posts in a specific channel, purpose built to catch compromised
+or token-stolen accounts that mass-spam every channel across several public Discord communities.
 
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
 ![discord.js](https://img.shields.io/badge/discord.js-v14-blue)
@@ -21,7 +23,7 @@ hit the trap first, so this stops them before they finish.
   with sweepers (it never loads the full member list).
 - Cross-platform. Runs anywhere Node 18+ or Docker runs: Linux, macOS, and
   Windows, on x86-64 and arm64 (including a Raspberry Pi).
-- Safe. Ignores staff and the pinned notice, and never crashes on a failed ban.
+- Safe. Ignores staff (Administrator permission) and the pinned notice, and never crashes on a failed ban.
 
 ## How it works
 
@@ -29,7 +31,7 @@ hit the trap first, so this stops them before they finish.
    The bot replies privately with the exact permissions it needs and a
    role-hierarchy warning.
 2. You post one message in that channel. The bot pins it as the permanent warning
-   notice (the "anchor"), stores its ID, and flips the honeypot to ACTIVE. The
+   notice (the "anchor"), stores its ID, and the honeypot goes ACTIVE. The
    anchor is never deleted and never triggers a ban.
 3. From then on, anyone who posts there is deleted and banned, except for bots,
    the server owner, anyone with Administrator, and the pinned anchor message.
@@ -39,8 +41,9 @@ and a warning is logged instead of crashing.
 
 ## Just want the bot in your server?
 
-Use the invite link (coming soon) and skip straight to [Usage](#usage). The
-rest of this page is for people hosting their own instance.
+[**Invite Hunny**](https://discord.com/oauth2/authorize?client_id=1515012645315678348)
+and skip straight to [Usage](#usage). The rest of this page is for people
+hosting their own instance.
 
 ## Setup
 
