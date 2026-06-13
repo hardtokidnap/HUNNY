@@ -17,6 +17,7 @@ const {
   InteractionContextType,
 } = require('discord.js');
 
+const fs = require('node:fs');
 const store = require('./store');
 const { gInfo, gWarn, gError } = require('./log');
 const { checkForUpdate } = require('./update-check');
@@ -32,6 +33,18 @@ const DELETE_MESSAGE_SECONDS = 604800; // 7 days, purges spam server-wide
 // Days of per-guild event history kept in the database for backend review.
 const LOG_RETENTION_DAYS = Math.max(1, Number(process.env.LOG_RETENTION_DAYS) || 30);
 const PRUNE_INTERVAL_MS = 86400000;
+
+// Touched only while the gateway is READY: a hung gateway leaves the process
+// alive (restart:unless-stopped won't fire) but lets this go stale for the healthcheck.
+const HEARTBEAT_FILE = process.env.HEARTBEAT_FILE || '/data/heartbeat';
+const HEARTBEAT_INTERVAL_MS = 30000;
+function writeHeartbeat() {
+  try {
+    fs.writeFileSync(HEARTBEAT_FILE, String(Date.now()));
+  } catch {
+    /* best-effort: a failed write just lets the timestamp age toward unhealthy */
+  }
+}
 
 const client = new Client({
   intents: [
@@ -217,6 +230,7 @@ async function sendGuildLog(guild, config, text) {
 
 client.once(Events.ClientReady, async (c) => {
   console.log(`[ready] Logged in as ${c.user.tag}`);
+  writeHeartbeat(); // seed immediately so the healthcheck passes from the first ready tick
   // Global registration: one call covers every current and future guild, and
   // the App Directory's "uses slash commands" check only sees global commands.
   try {
@@ -604,6 +618,9 @@ async function pruneOldEvents() {
   // unref() so a pending timer never holds the process open during shutdown.
   setInterval(pruneOldEvents, PRUNE_INTERVAL_MS).unref();
   setInterval(checkForUpdate, PRUNE_INTERVAL_MS).unref();
+  setInterval(() => {
+    if (client.isReady()) writeHeartbeat();
+  }, HEARTBEAT_INTERVAL_MS).unref();
   try {
     await client.login(TOKEN);
   } catch (err) {

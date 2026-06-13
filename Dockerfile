@@ -23,4 +23,10 @@ VOLUME ["/data"]
 RUN mkdir -p /data && chown -R node:node /data /app
 USER node
 
+# Liveness: the bot rewrites /data/heartbeat every 30s while the gateway is up.
+# Stale > 2 min => unhealthy. Uses node (coreutils may be absent in slim) and
+# start-period covers the boot window before the first heartbeat is seeded.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD node -e "const fs=require('fs');const f=process.env.HEARTBEAT_FILE||'/data/heartbeat';const t=+fs.readFileSync(f,'utf8');process.exit(Date.now()-t<120000?0:1)" || exit 1
+
 CMD ["node", "src/index.js"]
