@@ -122,8 +122,9 @@ A short checklist for running this (or any) Discord bot safely and reliably.
 
 1. Treat the token as a password. Keep it only in `DISCORD_TOKEN` (via `.env` or
    your host's secret store), never in code or version control. `.env` is
-   gitignored and dockerignored here. If it ever leaks, regenerate it in the
-   Developer Portal immediately.
+   gitignored and dockerignored here; also keep it out of AI coding assistants
+   (see [Keeping `.env` out of AI coding assistants](#keeping-env-out-of-ai-coding-assistants)).
+   If it ever leaks, regenerate it in the Developer Portal immediately.
 2. Request only the intents and permissions you need. This bot uses exactly four
    intents and four permissions (plus Send Messages in the log channel, only if
    you configure one), nothing more.
@@ -166,6 +167,71 @@ the host it runs on.
   [`deploy/discord-honeypot.service`](./deploy/discord-honeypot.service).
 - Protect the token: keep `.env` at `chmod 600` (the installer does this) and
   regenerate the token in the Developer Portal immediately if it ever leaks.
+
+## Keeping `.env` out of AI coding assistants
+
+AI coding tools (editor assistants, agents, CLIs) read file contents and often upload them to a model provider to build context or a search index. Your `.env` holds `DISCORD_TOKEN`, so it can be swept up the same way. The protection that actually holds is the same as for git: never commit a real `.env` (commit `.env.example` instead) and keep it at `chmod 600`. On top of that, tell each assistant to skip it. Coverage and reliability differ by tool, so treat the table below as defense in depth, not a guarantee.
+
+| Tool | How to exclude `.env` | Notes |
+| --- | --- | --- |
+| Claude Code | Add a deny rule to `.claude/settings.json`: `"permissions": { "deny": ["Read(.env)", "Read(**/.env)"] }` | Enforced by the harness, not the model. A `.claudeignore` file is **not** officially supported and does not reliably block reads. |
+| Cursor | `.cursorignore` in the repo root (gitignore syntax) | Blocks AI access, indexing, and `@`-mentions. `.cursorindexingignore` only skips indexing; the file stays readable. |
+| JetBrains AI Assistant / Junie | `.aiignore` in the repo root; enable under Settings > Tools > AI Assistant | "Brave mode" bypasses it. Protects contents, not file names. |
+| Gemini Code Assist | `.aiexclude` in the repo root (gitignore syntax) | Takes precedence over `.gitignore`. |
+| Gemini CLI | `.geminiignore` in the repo root | Restart the CLI session after editing. |
+| OpenAI Codex CLI | No reliable ignore file as of 2026 (`.codexignore` is not respected) | Make `.env` unreadable to the process at the OS level instead. |
+
+Bottom line: a gitignored, `chmod 600`, never-committed `.env` is what protects the token. The per-tool entries reduce accidental indexing on top of that.
+
+## Forking: keeping it building, patched, and secure
+
+Self-hosting a fork means you own its dependency hygiene. GitHub provides most of this free on a public repo (several features are paid on private repos); enable what applies under **Settings > Security > Code security** unless noted:
+
+- **Dependency graph + Dependabot alerts** flag any dependency with a known CVE. Free on public and private repos; the alerts need the graph on first.
+- **Dependabot security updates** auto-open a PR bumping a vulnerable dependency to its patched version. Free.
+- **Dependabot version updates** open scheduled PRs to keep dependencies current. This repo ships [`.github/dependabot.yml`](.github/dependabot.yml), so a fork inherits it; GitHub activates the scheduler automatically:
+  ```yaml
+  version: 2
+  updates:
+    - package-ecosystem: "npm"
+      directory: "/"
+      schedule:
+        interval: "weekly"
+      # Patch/minor npm noise grouped into one PR; majors stay separate
+      # because discord.js majors break APIs.
+      groups:
+        minor-and-patch:
+          update-types: ["minor", "patch"]
+    - package-ecosystem: "docker"
+      directory: "/"
+      schedule:
+        interval: "weekly"
+  ```
+- **Secret scanning + push protection** block a commit that contains a token before it lands. Discord bot tokens are detected, so a fat-fingered `DISCORD_TOKEN` is caught at push time. Free on public repos.
+- **Code scanning (CodeQL)**, via Code scanning > Set up > Default, runs static analysis on the JavaScript on every push and PR. Free on public repos.
+- **Dependency review** fails a PR that introduces a vulnerable dependency. Add `.github/workflows/dependency-review.yml`:
+  ```yaml
+  name: Dependency Review
+  on: [pull_request]
+  permissions:
+    contents: read
+  jobs:
+    dependency-review:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - uses: actions/dependency-review-action@v5
+  ```
+  Free on public repos.
+- **Private vulnerability reporting** gives researchers a private channel instead of public issues. Free.
+
+npm hygiene, regardless of host: `package-lock.json` is committed, so install with `npm ci` (not `npm install`) to match what was tested, and run `npm audit --audit-level=high` and `npm audit signatures` to fail on known vulnerabilities and tampered packages.
+
+### npm v12 install-script changes (already handled)
+
+npm v12 (estimated July 2026, [changelog](https://github.blog/changelog/2026-06-09-upcoming-breaking-changes-for-npm-v12/)) stops running dependency install scripts by default. `better-sqlite3` builds its native binding through an install script, so without an allowlist a plain `npm install` or `npm ci` under v12 skips that build and the bot fails to start. This is already taken care of: `package.json` ships an `allowScripts` entry approving `better-sqlite3`, so it keeps building. The allowlist mechanism has been available since npm 11.16 (run `npm approve-scripts` to regenerate it). One fork gotcha: the entry pins an exact version (`better-sqlite3@12.11.1`), so when Dependabot bumps the dependency you must re-approve and commit the new entry, or the native build is skipped again. The Docker image is unaffected regardless, since it builds the binding at image-build time. npm v12 also stops resolving git and remote-URL dependencies by default.
+
+TL;DR: In theory, you shouldn't be worried as long as the fork is updated and you run / update off of the fork.
 
 ## Storage
 

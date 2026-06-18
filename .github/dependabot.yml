@@ -16,7 +16,7 @@ updates:
           - "minor"
           - "patch"
 
-  # Base image in the Dockerfile (node:20-bookworm-slim)
+  # Base image in the Dockerfile (node:24-bookworm-slim)
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
