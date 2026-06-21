@@ -1,0 +1,2 @@
+# Force LF in the repo so Prettier's CI check passes identically on every OS.
+* text=auto eol=lf

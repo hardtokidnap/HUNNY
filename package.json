@@ -1,11 +1,14 @@
 {
   "name": "hunny",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "A Discord honeypot moderation bot: a trap channel that auto-bans anyone who posts in it, to catch compromised spam accounts.",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "lint": "eslint src eslint.config.js",
+    "format": "prettier --write \"src/**/*.js\" eslint.config.js",
+    "format:check": "prettier --check \"src/**/*.js\" eslint.config.js"
   },
   "keywords": [
     "discord",
@@ -32,6 +35,15 @@
     "better-sqlite3": "^12.10.0",
     "discord.js": "^14.16.3",
     "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.4"
+  },
+  "overrides": {
+    "undici": "^6.27.0"
   },
   "allowScripts": {
     "better-sqlite3@12.11.1": true
