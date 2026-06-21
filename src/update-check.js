@@ -24,7 +24,7 @@ async function checkForUpdate() {
     if (version && isNewer(version, LOCAL_VERSION)) {
       console.warn(
         `[update] v${version} is available (running v${LOCAL_VERSION}). ` +
-          'Update with: git pull && docker compose up -d --build',
+          'Update with: git pull && docker compose up -d --build'
       );
     }
   } catch (err) {
