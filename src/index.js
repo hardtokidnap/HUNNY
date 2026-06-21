@@ -94,14 +94,14 @@ const setupCommand = new SlashCommandBuilder()
       .setName('channel')
       .setDescription('The text channel to turn into the honeypot.')
       .addChannelTypes(ChannelType.GuildText)
-      .setRequired(true),
+      .setRequired(true)
   )
   .addChannelOption((option) =>
     option
       .setName('log_channel')
       .setDescription('Channel where the bot posts activation and ban notices (optional).')
       .addChannelTypes(ChannelType.GuildText)
-      .setRequired(false),
+      .setRequired(false)
   );
 
 // Every permission the /setup flow depends on, with live ok/missing state.
@@ -109,7 +109,10 @@ function checkSetupPermissions(guild, channel, logChannel) {
   const me = guild.members.me;
   const has = (ch, flag) => ch.permissionsFor(me)?.has(flag) ?? false;
   const checks = [
-    { label: `Server: Ban Members`, ok: me?.permissions.has(PermissionFlagsBits.BanMembers) ?? false },
+    {
+      label: `Server: Ban Members`,
+      ok: me?.permissions.has(PermissionFlagsBits.BanMembers) ?? false,
+    },
     { label: `<#${channel.id}>: View Channel`, ok: has(channel, PermissionFlagsBits.ViewChannel) },
     {
       label: `<#${channel.id}>: Manage Messages (deletes trigger messages)`,
@@ -118,14 +121,25 @@ function checkSetupPermissions(guild, channel, logChannel) {
     {
       // Discord split pinning out of Manage Messages; either grants it today.
       label: `<#${channel.id}>: Pin Messages (pins the warning notice)`,
-      ok: has(channel, PermissionFlagsBits.PinMessages) || has(channel, PermissionFlagsBits.ManageMessages),
+      ok:
+        has(channel, PermissionFlagsBits.PinMessages) ||
+        has(channel, PermissionFlagsBits.ManageMessages),
     },
-    { label: `<#${channel.id}>: Read Message History`, ok: has(channel, PermissionFlagsBits.ReadMessageHistory) },
+    {
+      label: `<#${channel.id}>: Read Message History`,
+      ok: has(channel, PermissionFlagsBits.ReadMessageHistory),
+    },
   ];
   if (logChannel) {
     checks.push(
-      { label: `<#${logChannel.id}>: View Channel`, ok: has(logChannel, PermissionFlagsBits.ViewChannel) },
-      { label: `<#${logChannel.id}>: Send Messages`, ok: has(logChannel, PermissionFlagsBits.SendMessages) },
+      {
+        label: `<#${logChannel.id}>: View Channel`,
+        ok: has(logChannel, PermissionFlagsBits.ViewChannel),
+      },
+      {
+        label: `<#${logChannel.id}>: Send Messages`,
+        ok: has(logChannel, PermissionFlagsBits.SendMessages),
+      }
     );
   }
   return checks;
@@ -162,7 +176,9 @@ function startPermissionPoll(interaction, channel, logChannel, baseContent) {
         ? ':x: **Still missing permissions.** Stopped checking; fix them and re-run /setup to verify.'
         : `Re-checking every minute (${polls}/${PERM_POLL_LIMIT})...`;
     try {
-      await interaction.editReply(`${baseContent}\n\n**Permission check**\n${formatChecks(checks)}\n\n${status}`);
+      await interaction.editReply(
+        `${baseContent}\n\n**Permission check**\n${formatChecks(checks)}\n\n${status}`
+      );
     } catch (err) {
       gWarn('setup', interaction.guild, 'updating the permission checklist', err);
       cancel();
@@ -192,7 +208,7 @@ async function activateHoneypot(guild, config, messageId, how) {
   await sendGuildLog(
     guild,
     config,
-    `Honeypot is now **ACTIVE** in <#${config.honeypotChannelId}>. Anyone who posts there (except users with the Administrator role) will be banned.`,
+    `Honeypot is now **ACTIVE** in <#${config.honeypotChannelId}>. Anyone who posts there (except users with the Administrator role) will be banned.`
   );
 
   const pending = pendingSetupReplies.get(guild.id);
@@ -203,7 +219,7 @@ async function activateHoneypot(guild, config, messageId, how) {
   try {
     await pending.interaction.editReply(
       `${pending.baseContent}\n\n**Permission check**\n${formatChecks(checks)}\n\n` +
-        `:white_check_mark: **Honeypot is ACTIVE** in <#${config.honeypotChannelId}>. Setup complete.`,
+        `:white_check_mark: **Honeypot is ACTIVE** in <#${config.honeypotChannelId}>. Setup complete.`
     );
   } catch (err) {
     gWarn('setup', guild, 'updating the setup reply with the active status', err);
@@ -301,8 +317,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (existing) {
       const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('setup_confirm').setLabel('Yes, reset it').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('setup_cancel').setLabel('No, keep it').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId('setup_confirm')
+          .setLabel('Yes, reset it')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId('setup_cancel')
+          .setLabel('No, keep it')
+          .setStyle(ButtonStyle.Secondary)
       );
       await interaction.reply({
         flags: MessageFlags.Ephemeral,
@@ -334,35 +356,46 @@ client.on(Events.InteractionCreate, async (interaction) => {
           content: 'Kept the existing configuration. Nothing changed.',
           components: [],
         });
-        gInfo('setup', interaction.guild, `re-run cancelled by ${interaction.user.tag} (${interaction.user.id})`);
+        gInfo(
+          'setup',
+          interaction.guild,
+          `re-run cancelled by ${interaction.user.tag} (${interaction.user.id})`
+        );
         return;
       }
 
       respond = (content) => click.update({ content, components: [] });
     }
 
-    await store.setHoneypot(interaction.guildId, channel.id, interaction.user.id, logChannel?.id ?? null);
+    await store.setHoneypot(
+      interaction.guildId,
+      channel.id,
+      interaction.user.id,
+      logChannel?.id ?? null
+    );
 
     gInfo(
       'setup',
       interaction.guild,
       `honeypot designated: channel ${channel.id} by ${interaction.user.tag} (${interaction.user.id})` +
         (logChannel ? `, log channel ${logChannel.id}` : '') +
-        ', awaiting anchor',
+        ', awaiting anchor'
     );
 
     const baseContent = [
       `Honeypot channel set to <#${channel.id}>.`,
       logChannel ? `Activity notices will be posted in <#${logChannel.id}>.` : null,
       '',
-      '**Important:** the bot\'s role must sit **ABOVE** the roles of anyone it ' +
+      "**Important:** the bot's role must sit **ABOVE** the roles of anyone it " +
         'should be able to ban. If a target outranks the bot, the ban silently fails.',
       '',
       `**Final step:** go to <#${channel.id}> and either **pin an existing message** ` +
         '(if you set up the channel before inviting the bot), or **post one new message** ' +
         'that the bot will pin. That message becomes the permanent warning notice and sets ' +
         'the honeypot to **ACTIVE**. It is never deleted and never triggers a ban.',
-    ].filter((line) => line !== null).join('\n');
+    ]
+      .filter((line) => line !== null)
+      .join('\n');
 
     const checks = checkSetupPermissions(interaction.guild, channel, logChannel);
     const allOk = checks.every((c) => c.ok);
@@ -458,13 +491,13 @@ client.on(Events.MessageCreate, async (message) => {
           'anchor',
           message.guild,
           `pinning anchor message ${message.id}`,
-          new Error('missing Pin Messages permission, did not attempt'),
+          new Error('missing Pin Messages permission, did not attempt')
         );
         await sendGuildLog(
           message.guild,
           config,
           `:warning: Could not pin the anchor message in <#${config.honeypotChannelId}> ` +
-            '(needs **Pin Messages** there). The honeypot still works, but the warning notice is not pinned.',
+            '(needs **Pin Messages** there). The honeypot still works, but the warning notice is not pinned.'
         );
         return;
       }
@@ -477,7 +510,7 @@ client.on(Events.MessageCreate, async (message) => {
           message.guild,
           config,
           `:warning: Could not pin the anchor message in <#${config.honeypotChannelId}>. ` +
-            'The honeypot still works, but the warning notice is not pinned.',
+            'The honeypot still works, but the warning notice is not pinned.'
         );
       }
       return;
@@ -517,13 +550,13 @@ client.on(Events.MessageCreate, async (message) => {
         'ban',
         guild,
         `banning ${who}`,
-        new Error('not bannable: target outranks bot or member could not be resolved'),
+        new Error('not bannable: target outranks bot or member could not be resolved')
       );
       await sendGuildLog(
         guild,
         config,
         `:warning: Honeypot triggered by **${message.author.tag}** (${message.author.id}) but the ban was ` +
-          'skipped: the target outranks the bot, or the member could not be resolved. Check the role hierarchy.',
+          'skipped: the target outranks the bot, or the member could not be resolved. Check the role hierarchy.'
       );
       return;
     }
@@ -548,7 +581,7 @@ client.on(Events.MessageCreate, async (message) => {
         guild,
         config,
         `:hammer: Banned **${message.author.tag}** (${message.author.id}) for posting in the honeypot. ` +
-          'Their messages from the last 7 days were purged.',
+          'Their messages from the last 7 days were purged.'
       );
     } catch (err) {
       gError('ban', guild, `banning ${who}`, err);
@@ -556,7 +589,7 @@ client.on(Events.MessageCreate, async (message) => {
         guild,
         config,
         `:warning: Honeypot triggered by **${message.author.tag}** (${message.author.id}) but the ban failed: ` +
-          `${err.message || err}. Check the bot's permissions and role position.`,
+          `${err.message || err}. Check the bot's permissions and role position.`
       );
     }
   } catch (err) {
@@ -600,7 +633,8 @@ process.once('SIGTERM', () => shutdown('SIGTERM'));
 async function pruneOldEvents() {
   try {
     const removed = await store.pruneEvents(LOG_RETENTION_DAYS);
-    if (removed > 0) console.log(`[store] Pruned ${removed} event(s) older than ${LOG_RETENTION_DAYS} days`);
+    if (removed > 0)
+      console.log(`[store] Pruned ${removed} event(s) older than ${LOG_RETENTION_DAYS} days`);
   } catch (err) {
     console.error('[store] Failed to prune old events:', err);
   }

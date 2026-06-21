@@ -41,7 +41,9 @@ async function init() {
       message    text NOT NULL
     );
   `);
-  await pool.query('CREATE INDEX IF NOT EXISTS idx_events_guild_time ON events (guild_id, created_at)');
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_events_guild_time ON events (guild_id, created_at)'
+  );
 
   console.log('[store] Using PostgreSQL via DATABASE_URL');
 }
@@ -49,7 +51,7 @@ async function init() {
 async function getGuild(guildId) {
   const { rows } = await pool.query(
     'SELECT guild_id, honeypot_channel_id, setup_user_id, anchor_message_id, log_channel_id FROM guilds WHERE guild_id = $1',
-    [guildId],
+    [guildId]
   );
   if (rows.length === 0) return null;
   const row = rows[0];
@@ -76,12 +78,15 @@ async function setHoneypot(guildId, channelId, userId, logChannelId = null) {
        setup_user_id       = EXCLUDED.setup_user_id,
        anchor_message_id   = NULL,
        log_channel_id      = EXCLUDED.log_channel_id`,
-    [guildId, channelId, userId, logChannelId],
+    [guildId, channelId, userId, logChannelId]
   );
 }
 
 async function setAnchor(guildId, messageId) {
-  await pool.query('UPDATE guilds SET anchor_message_id = $1 WHERE guild_id = $2', [messageId, guildId]);
+  await pool.query('UPDATE guilds SET anchor_message_id = $1 WHERE guild_id = $2', [
+    messageId,
+    guildId,
+  ]);
 }
 
 async function deleteGuild(guildId) {
@@ -94,7 +99,7 @@ async function deleteGuild(guildId) {
 async function logEvent(guildId, level, tag, message) {
   await pool.query(
     'INSERT INTO events (guild_id, created_at, level, tag, message) VALUES ($1, $2, $3, $4, $5)',
-    [guildId, new Date().toISOString(), level, tag, message],
+    [guildId, new Date().toISOString(), level, tag, message]
   );
 }
 
@@ -108,4 +113,13 @@ async function close() {
   await pool.end();
 }
 
-module.exports = { init, getGuild, setHoneypot, setAnchor, deleteGuild, logEvent, pruneEvents, close };
+module.exports = {
+  init,
+  getGuild,
+  setHoneypot,
+  setAnchor,
+  deleteGuild,
+  logEvent,
+  pruneEvents,
+  close,
+};

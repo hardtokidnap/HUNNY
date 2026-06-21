@@ -56,7 +56,7 @@ async function init() {
   }
 
   selectStmt = db.prepare(
-    'SELECT guild_id, honeypot_channel_id, setup_user_id, anchor_message_id, log_channel_id FROM guilds WHERE guild_id = ?',
+    'SELECT guild_id, honeypot_channel_id, setup_user_id, anchor_message_id, log_channel_id FROM guilds WHERE guild_id = ?'
   );
 
   // Re-designating a channel resets the anchor to NULL, which returns the guild
@@ -76,7 +76,7 @@ async function init() {
   deleteGuildStmt = db.prepare('DELETE FROM guilds WHERE guild_id = ?');
 
   insertEventStmt = db.prepare(
-    'INSERT INTO events (guild_id, created_at, level, tag, message) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO events (guild_id, created_at, level, tag, message) VALUES (?, ?, ?, ?, ?)'
   );
   deleteGuildEventsStmt = db.prepare('DELETE FROM events WHERE guild_id = ?');
   pruneEventsStmt = db.prepare('DELETE FROM events WHERE created_at < ?');
@@ -129,4 +129,13 @@ async function close() {
   db.close();
 }
 
-module.exports = { init, getGuild, setHoneypot, setAnchor, deleteGuild, logEvent, pruneEvents, close };
+module.exports = {
+  init,
+  getGuild,
+  setHoneypot,
+  setAnchor,
+  deleteGuild,
+  logEvent,
+  pruneEvents,
+  close,
+};
