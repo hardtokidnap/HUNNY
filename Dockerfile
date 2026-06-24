@@ -1,6 +1,6 @@
 # Multi-arch friendly (works on x86-64 and arm64 / Raspberry Pi).
 # Stays on the active LTS line; Current (odd/new majors) churns too fast for a bot.
-FROM node:24-bookworm-slim
+FROM node:25-bookworm-slim
 
 # better-sqlite3 ships prebuilt binaries for linux x64/arm64 (glibc), so no
 # build toolchain is needed on these platforms.
