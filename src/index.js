@@ -415,7 +415,7 @@ client.once(Events.ClientReady, async (c) => {
       scoreboardCommand.toJSON(),
       unflipsCommand.toJSON(),
     ]);
-    console.log('[commands] Registered /setup and /scoreboard globally');
+    console.log('[commands] Registered /setup, /scoreboard, and /unflips globally');
   } catch (err) {
     console.error('[commands] Failed to register /setup globally:', err);
   }
