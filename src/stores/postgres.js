@@ -25,11 +25,15 @@ async function init() {
       honeypot_channel_id text NOT NULL,
       setup_user_id       text NOT NULL,
       anchor_message_id   text,
-      log_channel_id      text
+      log_channel_id      text,
+      snipe_count         integer NOT NULL DEFAULT 0,
+      last_snipe_at       text,
+      stats_message_id    text,
+      stats_channel_id    text,
+      scoreboard_enabled  integer NOT NULL DEFAULT 1,
+      tableflip_enabled   integer NOT NULL DEFAULT 1
     );
   `);
-  // Idempotent column add for databases created before in-guild logging existed.
-  await pool.query('ALTER TABLE guilds ADD COLUMN IF NOT EXISTS log_channel_id text');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS events (
@@ -45,12 +49,44 @@ async function init() {
     'CREATE INDEX IF NOT EXISTS idx_events_guild_time ON events (guild_id, created_at)'
   );
 
+  // Idempotent column adds so databases created by older versions migrate on start.
+  await pool.query('ALTER TABLE guilds ADD COLUMN IF NOT EXISTS log_channel_id text');
+
+  // Absent snipe_count means a pre-scoreboard database, so seed from history once
+  // after adding the columns (events already exists above for the backfill to read).
+  const { rows: hasSnipe } = await pool.query(
+    "SELECT 1 FROM information_schema.columns WHERE table_name = 'guilds' AND column_name = 'snipe_count'"
+  );
+  await pool.query(
+    'ALTER TABLE guilds ADD COLUMN IF NOT EXISTS snipe_count integer NOT NULL DEFAULT 0'
+  );
+  await pool.query('ALTER TABLE guilds ADD COLUMN IF NOT EXISTS last_snipe_at text');
+  await pool.query('ALTER TABLE guilds ADD COLUMN IF NOT EXISTS stats_message_id text');
+  await pool.query('ALTER TABLE guilds ADD COLUMN IF NOT EXISTS stats_channel_id text');
+  await pool.query(
+    'ALTER TABLE guilds ADD COLUMN IF NOT EXISTS scoreboard_enabled integer NOT NULL DEFAULT 1'
+  );
+  await pool.query(
+    'ALTER TABLE guilds ADD COLUMN IF NOT EXISTS tableflip_enabled integer NOT NULL DEFAULT 1'
+  );
+  if (hasSnipe.length === 0) {
+    await pool.query(`
+      UPDATE guilds SET
+        snipe_count = (SELECT COUNT(*) FROM events e
+                       WHERE e.guild_id = guilds.guild_id AND e.tag = 'ban' AND e.level = 'info'),
+        last_snipe_at = (SELECT MAX(e.created_at) FROM events e
+                         WHERE e.guild_id = guilds.guild_id AND e.tag = 'ban' AND e.level = 'info')
+    `);
+  }
+
   console.log('[store] Using PostgreSQL via DATABASE_URL');
 }
 
 async function getGuild(guildId) {
   const { rows } = await pool.query(
-    'SELECT guild_id, honeypot_channel_id, setup_user_id, anchor_message_id, log_channel_id FROM guilds WHERE guild_id = $1',
+    'SELECT guild_id, honeypot_channel_id, setup_user_id, anchor_message_id, log_channel_id, ' +
+      'snipe_count, last_snipe_at, stats_message_id, stats_channel_id, scoreboard_enabled, ' +
+      'tableflip_enabled FROM guilds WHERE guild_id = $1',
     [guildId]
   );
   if (rows.length === 0) return null;
@@ -64,6 +100,12 @@ async function getGuild(guildId) {
     logChannelId: row.log_channel_id,
     awaitingAnchor: anchorMessageId == null,
     active: anchorMessageId != null,
+    snipeCount: row.snipe_count,
+    lastSnipeAt: row.last_snipe_at,
+    statsMessageId: row.stats_message_id,
+    statsChannelId: row.stats_channel_id,
+    scoreboardEnabled: row.scoreboard_enabled !== 0,
+    tableflipEnabled: row.tableflip_enabled !== 0,
   };
 }
 
@@ -85,6 +127,34 @@ async function setHoneypot(guildId, channelId, userId, logChannelId = null) {
 async function setAnchor(guildId, messageId) {
   await pool.query('UPDATE guilds SET anchor_message_id = $1 WHERE guild_id = $2', [
     messageId,
+    guildId,
+  ]);
+}
+
+async function recordSnipe(guildId) {
+  await pool.query(
+    'UPDATE guilds SET snipe_count = snipe_count + 1, last_snipe_at = $1 WHERE guild_id = $2',
+    [new Date().toISOString(), guildId]
+  );
+}
+
+async function setScoreboardEnabled(guildId, enabled) {
+  await pool.query('UPDATE guilds SET scoreboard_enabled = $1 WHERE guild_id = $2', [
+    enabled ? 1 : 0,
+    guildId,
+  ]);
+}
+
+async function setStatsMessage(guildId, messageId, channelId = null) {
+  await pool.query(
+    'UPDATE guilds SET stats_message_id = $1, stats_channel_id = $2 WHERE guild_id = $3',
+    [messageId, channelId, guildId]
+  );
+}
+
+async function setTableflipEnabled(guildId, enabled) {
+  await pool.query('UPDATE guilds SET tableflip_enabled = $1 WHERE guild_id = $2', [
+    enabled ? 1 : 0,
     guildId,
   ]);
 }
@@ -118,6 +188,10 @@ module.exports = {
   getGuild,
   setHoneypot,
   setAnchor,
+  recordSnipe,
+  setScoreboardEnabled,
+  setStatsMessage,
+  setTableflipEnabled,
   deleteGuild,
   logEvent,
   pruneEvents,
