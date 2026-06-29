@@ -25,6 +25,10 @@ let deleteGuildStmt;
 let insertEventStmt;
 let deleteGuildEventsStmt;
 let pruneEventsStmt;
+let recordSnipeStmt;
+let setScoreboardEnabledStmt;
+let setStatsMessageStmt;
+let setTableflipEnabledStmt;
 
 async function init() {
   db.exec(`
@@ -33,7 +37,13 @@ async function init() {
       honeypot_channel_id TEXT NOT NULL,
       setup_user_id       TEXT NOT NULL,
       anchor_message_id   TEXT,
-      log_channel_id      TEXT
+      log_channel_id      TEXT,
+      snipe_count         INTEGER NOT NULL DEFAULT 0,
+      last_snipe_at       TEXT,
+      stats_message_id    TEXT,
+      stats_channel_id    TEXT,
+      scoreboard_enabled  INTEGER NOT NULL DEFAULT 1,
+      tableflip_enabled   INTEGER NOT NULL DEFAULT 1
     );
 
     CREATE TABLE IF NOT EXISTS events (
@@ -48,15 +58,42 @@ async function init() {
     CREATE INDEX IF NOT EXISTS idx_events_guild_time ON events (guild_id, created_at);
   `);
 
-  // Idempotent column add for databases created before in-guild logging existed.
-  try {
-    db.exec('ALTER TABLE guilds ADD COLUMN log_channel_id TEXT');
-  } catch (err) {
-    if (!/duplicate column/i.test(err.message || '')) throw err;
+  // Idempotent column adds so databases created by older versions migrate on start.
+  const addColumn = (sql) => {
+    try {
+      db.exec(sql);
+      return true;
+    } catch (err) {
+      if (/duplicate column/i.test(err.message || '')) return false;
+      throw err;
+    }
+  };
+  addColumn('ALTER TABLE guilds ADD COLUMN log_channel_id TEXT');
+  const snipeColumnAdded = addColumn(
+    'ALTER TABLE guilds ADD COLUMN snipe_count INTEGER NOT NULL DEFAULT 0'
+  );
+  addColumn('ALTER TABLE guilds ADD COLUMN last_snipe_at TEXT');
+  addColumn('ALTER TABLE guilds ADD COLUMN stats_message_id TEXT');
+  addColumn('ALTER TABLE guilds ADD COLUMN stats_channel_id TEXT');
+  addColumn('ALTER TABLE guilds ADD COLUMN scoreboard_enabled INTEGER NOT NULL DEFAULT 1');
+  addColumn('ALTER TABLE guilds ADD COLUMN tableflip_enabled INTEGER NOT NULL DEFAULT 1');
+
+  // ban/info is exactly the ban-success log path; seed lifetime counts from it
+  // once, riding the snipe_count add so it never re-runs over live counters.
+  if (snipeColumnAdded) {
+    db.exec(`
+      UPDATE guilds SET
+        snipe_count = (SELECT COUNT(*) FROM events e
+                       WHERE e.guild_id = guilds.guild_id AND e.tag = 'ban' AND e.level = 'info'),
+        last_snipe_at = (SELECT MAX(e.created_at) FROM events e
+                         WHERE e.guild_id = guilds.guild_id AND e.tag = 'ban' AND e.level = 'info')
+    `);
   }
 
   selectStmt = db.prepare(
-    'SELECT guild_id, honeypot_channel_id, setup_user_id, anchor_message_id, log_channel_id FROM guilds WHERE guild_id = ?'
+    'SELECT guild_id, honeypot_channel_id, setup_user_id, anchor_message_id, log_channel_id, ' +
+      'snipe_count, last_snipe_at, stats_message_id, stats_channel_id, scoreboard_enabled, ' +
+      'tableflip_enabled FROM guilds WHERE guild_id = ?'
   );
 
   // Re-designating a channel resets the anchor to NULL, which returns the guild
@@ -81,6 +118,19 @@ async function init() {
   deleteGuildEventsStmt = db.prepare('DELETE FROM events WHERE guild_id = ?');
   pruneEventsStmt = db.prepare('DELETE FROM events WHERE created_at < ?');
 
+  recordSnipeStmt = db.prepare(
+    'UPDATE guilds SET snipe_count = snipe_count + 1, last_snipe_at = ? WHERE guild_id = ?'
+  );
+  setScoreboardEnabledStmt = db.prepare(
+    'UPDATE guilds SET scoreboard_enabled = ? WHERE guild_id = ?'
+  );
+  setStatsMessageStmt = db.prepare(
+    'UPDATE guilds SET stats_message_id = ?, stats_channel_id = ? WHERE guild_id = ?'
+  );
+  setTableflipEnabledStmt = db.prepare(
+    'UPDATE guilds SET tableflip_enabled = ? WHERE guild_id = ?'
+  );
+
   console.log(`[store] Using SQLite at ${DB_FILE}`);
 }
 
@@ -96,6 +146,12 @@ async function getGuild(guildId) {
     logChannelId: row.log_channel_id,
     awaitingAnchor: anchorMessageId == null,
     active: anchorMessageId != null,
+    snipeCount: row.snipe_count,
+    lastSnipeAt: row.last_snipe_at,
+    statsMessageId: row.stats_message_id,
+    statsChannelId: row.stats_channel_id,
+    scoreboardEnabled: row.scoreboard_enabled !== 0,
+    tableflipEnabled: row.tableflip_enabled !== 0,
   };
 }
 
@@ -105,6 +161,22 @@ async function setHoneypot(guildId, channelId, userId, logChannelId = null) {
 
 async function setAnchor(guildId, messageId) {
   setAnchorStmt.run(messageId, guildId);
+}
+
+async function recordSnipe(guildId) {
+  recordSnipeStmt.run(new Date().toISOString(), guildId);
+}
+
+async function setScoreboardEnabled(guildId, enabled) {
+  setScoreboardEnabledStmt.run(enabled ? 1 : 0, guildId);
+}
+
+async function setStatsMessage(guildId, messageId, channelId = null) {
+  setStatsMessageStmt.run(messageId, channelId, guildId);
+}
+
+async function setTableflipEnabled(guildId, enabled) {
+  setTableflipEnabledStmt.run(enabled ? 1 : 0, guildId);
 }
 
 async function deleteGuild(guildId) {
@@ -134,6 +206,10 @@ module.exports = {
   getGuild,
   setHoneypot,
   setAnchor,
+  recordSnipe,
+  setScoreboardEnabled,
+  setStatsMessage,
+  setTableflipEnabled,
   deleteGuild,
   logEvent,
   pruneEvents,

@@ -20,6 +20,8 @@ npm install
 cp .env.example .env        # paste your test bot's token
 ```
 
+`better-sqlite3` compiles a native binding via an npm install script. [npm v12](https://github.blog/changelog/2026-06-09-upcoming-breaking-changes-for-npm-v12/) stops running install scripts by default, so you may have to allow it (`npm approve-scripts`); `package.json` already ships an `allowScripts` approval for it.
+
 ### Development
 
 ```bash

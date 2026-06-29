@@ -21,6 +21,8 @@ const fs = require('node:fs');
 const store = require('./store');
 const { gInfo, gWarn, gError } = require('./log');
 const { checkForUpdate } = require('./update-check');
+const { postScoreboard, scheduleScoreboardUpdate } = require('./scoreboard');
+const { handleTableflip, forgetGuild } = require('./tableflip');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 if (!TOKEN) {
@@ -102,6 +104,30 @@ const setupCommand = new SlashCommandBuilder()
       .setDescription('Channel where the bot posts activation and ban notices (optional).')
       .addChannelTypes(ChannelType.GuildText)
       .setRequired(false)
+  );
+
+const scoreboardCommand = new SlashCommandBuilder()
+  .setName('scoreboard')
+  .setDescription('Show or hide the honeypot snipe scoreboard in the trap channel.')
+  .setContexts(InteractionContextType.Guild)
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  .addBooleanOption((option) =>
+    option
+      .setName('enabled')
+      .setDescription('true posts/keeps the scoreboard, false hides it.')
+      .setRequired(true)
+  );
+
+const unflipsCommand = new SlashCommandBuilder()
+  .setName('unflips')
+  .setDescription('Toggle the tableflip easter egg (the bot unflips tables members flip).')
+  .setContexts(InteractionContextType.Guild)
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  .addBooleanOption((option) =>
+    option
+      .setName('enabled')
+      .setDescription('true lets the bot unflip tables, false silences it.')
+      .setRequired(true)
   );
 
 // Every permission the /setup flow depends on, with live ok/missing state.
@@ -211,6 +237,11 @@ async function activateHoneypot(guild, config, messageId, how) {
     `Honeypot is now **ACTIVE** in <#${config.honeypotChannelId}>. Anyone who posts there (except users with the Administrator role) will be banned.`
   );
 
+  if (config.scoreboardEnabled !== false) {
+    const fresh = await store.getGuild(guild.id);
+    if (fresh) await postScoreboard(guild, fresh);
+  }
+
   const pending = pendingSetupReplies.get(guild.id);
   if (!pending) return;
   pendingSetupReplies.delete(guild.id);
@@ -240,6 +271,135 @@ async function sendGuildLog(guild, config, text) {
   }
 }
 
+async function handleScoreboardCommand(interaction) {
+  try {
+    if (!interaction.inGuild()) {
+      await interaction.reply({
+        content: 'This command can only be used inside a server.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const isOwner = interaction.guild?.ownerId === interaction.user.id;
+    const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+    if (!isOwner && !isAdmin) {
+      await interaction.reply({
+        content: 'Only the server owner or an Administrator can run /scoreboard.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const config = await store.getGuild(interaction.guildId);
+    if (!config || !config.honeypotChannelId) {
+      await interaction.reply({
+        content: 'No honeypot configured yet. Run /setup first.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    // Posting/fetching/deleting can exceed the 3s ack window, so defer first.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const enabled = interaction.options.getBoolean('enabled');
+    if (enabled) {
+      await store.setScoreboardEnabled(interaction.guildId, true);
+      const fresh = await store.getGuild(interaction.guildId);
+      const id = await postScoreboard(interaction.guild, fresh);
+      gInfo('scoreboard', interaction.guild, `enabled by ${interaction.user.tag}`);
+      await interaction.editReply({
+        content: id
+          ? `Scoreboard is ON in <#${config.honeypotChannelId}>.`
+          : 'Scoreboard enabled, but I could not post it (check my permissions in the channel).',
+      });
+    } else {
+      await store.setScoreboardEnabled(interaction.guildId, false);
+      if (config.statsMessageId) {
+        const oldChannelId = config.statsChannelId ?? config.honeypotChannelId;
+        try {
+          const channel =
+            interaction.guild.channels.cache.get(oldChannelId) ??
+            (await interaction.guild.channels.fetch(oldChannelId));
+          const message = await channel.messages.fetch(config.statsMessageId);
+          await message.delete();
+          // Forget the id only after the delete lands, so a failed delete retries later.
+          await store.setStatsMessage(interaction.guildId, null, null);
+        } catch (err) {
+          gWarn('scoreboard', interaction.guild, 'deleting the scoreboard message', err);
+        }
+      }
+      gInfo('scoreboard', interaction.guild, `disabled by ${interaction.user.tag}`);
+      await interaction.editReply({
+        content: 'Scoreboard is OFF. The counter keeps running; re-enable any time.',
+      });
+    }
+  } catch (err) {
+    gError('scoreboard', interaction.guild, 'handling /scoreboard', err);
+    try {
+      const content = 'Something went wrong. Check the bot logs.';
+      if (interaction.deferred || interaction.replied) await interaction.editReply({ content });
+      else await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+    } catch (_) {
+      /* swallow */
+    }
+  }
+}
+
+async function handleUnflipsCommand(interaction) {
+  try {
+    if (!interaction.inGuild()) {
+      await interaction.reply({
+        content: 'This command can only be used inside a server.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const isOwner = interaction.guild?.ownerId === interaction.user.id;
+    const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+    if (!isOwner && !isAdmin) {
+      await interaction.reply({
+        content: 'Only the server owner or an Administrator can run /unflips.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const config = await store.getGuild(interaction.guildId);
+    if (!config || !config.honeypotChannelId) {
+      await interaction.reply({
+        content: 'No honeypot configured yet. Run /setup first.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const enabled = interaction.options.getBoolean('enabled');
+    await store.setTableflipEnabled(interaction.guildId, enabled);
+    gInfo(
+      'tableflip',
+      interaction.guild,
+      `${enabled ? 'enabled' : 'disabled'} by ${interaction.user.tag}`
+    );
+    await interaction.reply({
+      content: enabled
+        ? 'Tableflip easter egg is ON. Profanity stays in NSFW channels only.'
+        : 'Tableflip easter egg is OFF.',
+      flags: MessageFlags.Ephemeral,
+    });
+  } catch (err) {
+    gError('tableflip', interaction.guild, 'handling /unflips', err);
+    try {
+      const content = 'Something went wrong. Check the bot logs.';
+      if (interaction.deferred || interaction.replied)
+        await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+      else await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+    } catch (_) {
+      /* swallow */
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
@@ -250,8 +410,12 @@ client.once(Events.ClientReady, async (c) => {
   // Global registration: one call covers every current and future guild, and
   // the App Directory's "uses slash commands" check only sees global commands.
   try {
-    await c.application.commands.set([setupCommand.toJSON()]);
-    console.log('[commands] Registered /setup globally');
+    await c.application.commands.set([
+      setupCommand.toJSON(),
+      scoreboardCommand.toJSON(),
+      unflipsCommand.toJSON(),
+    ]);
+    console.log('[commands] Registered /setup, /scoreboard, and /unflips globally');
   } catch (err) {
     console.error('[commands] Failed to register /setup globally:', err);
   }
@@ -272,6 +436,7 @@ client.on(Events.GuildDelete, async (guild) => {
   try {
     activePermPolls.get(guild.id)?.cancel();
     pendingSetupReplies.delete(guild.id);
+    forgetGuild(guild.id);
     await store.deleteGuild(guild.id);
     gInfo('cleanup', guild, 'removed config for departed guild');
   } catch (err) {
@@ -285,6 +450,14 @@ client.on(Events.GuildDelete, async (guild) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+  if (interaction.commandName === 'scoreboard') {
+    await handleScoreboardCommand(interaction);
+    return;
+  }
+  if (interaction.commandName === 'unflips') {
+    await handleUnflipsCommand(interaction);
+    return;
+  }
   if (interaction.commandName !== 'setup') return;
 
   try {
@@ -583,6 +756,14 @@ client.on(Events.MessageCreate, async (message) => {
         `:hammer: Banned **${message.author.tag}** (${message.author.id}) for posting in the honeypot. ` +
           'Their messages from the last 7 days were purged.'
       );
+      // Counter is the source of truth and must update even if the scoreboard is
+      // off or its message is gone; the edit is coalesced and best-effort.
+      try {
+        await store.recordSnipe(guild.id);
+        scheduleScoreboardUpdate(guild);
+      } catch (err) {
+        gWarn('scoreboard', guild, 'recording the snipe', err);
+      }
     } catch (err) {
       gError('ban', guild, `banning ${who}`, err);
       await sendGuildLog(
@@ -595,6 +776,16 @@ client.on(Events.MessageCreate, async (message) => {
   } catch (err) {
     // Never let a message handler crash the process.
     gError('messageCreate', message.guild, 'unexpected handler error', err);
+  }
+});
+
+// Separate listener: the honeypot handler above returns for any non-trap channel,
+// but the tableflip easter egg fires server-wide.
+client.on(Events.MessageCreate, async (message) => {
+  try {
+    await handleTableflip(message, store);
+  } catch (err) {
+    gError('tableflip', message.guild, 'unexpected handler error', err);
   }
 });
 
